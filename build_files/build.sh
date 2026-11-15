@@ -39,6 +39,7 @@ enabled=1
 gpgcheck=1
 gpgkey=https://dl.google.com/linux/linux_signing_key.pub
 CHROME_REPO
+mkdir -p /var/opt
 dnf5 install -y google-chrome-stable
 
 # 2. Pre-configure Chrome Enterprise Policy for Microsoft 365 PWAs
