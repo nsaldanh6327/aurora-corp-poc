@@ -30,23 +30,13 @@ systemctl enable podman.socket
 ### ENTERPRISE CUSTOMIZATIONS: CHROME, M365 PWAS, AND ONLYOFFICE
 ### ----------------------------------------------------------------------------
 
-### Install Google Chrome safely for bootc/ostree (/opt -> /usr/lib/opt)
 mkdir -p /var/opt /usr/lib/opt
-cat << 'EOF' > /etc/yum.repos.d/google-chrome.repo
-[google-chrome]
-name=google-chrome
-baseurl=https://google.com
-enabled=1
-gpgcheck=1
-gpgkey=https://google.com
-EOF
+dnf5 install -y fedora-workstation-repositories
+dnf5 config-manager setopt google-chrome.enabled=1
 dnf5 install -y google-chrome-stable
-
-# Move Chrome from /var/opt to /usr/lib/opt so it survives image sealing
 mv /var/opt/google /usr/lib/opt/google
-cat << 'EOF' > /usr/lib/tmpfiles.d/google-chrome.conf
-L /var/opt/google - - - - /usr/lib/opt/google
-EOF
+printf "L /var/opt/google - - - - /usr/lib/opt/google\n" > /usr/lib/tmpfiles.d/google-chrome.conf
+
 
 
 # 2. Pre-configure Chrome Enterprise Policy for Microsoft 365 PWAs
