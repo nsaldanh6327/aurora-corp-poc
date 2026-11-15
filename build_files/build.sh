@@ -37,28 +37,17 @@ dnf5 install -y google-chrome-stable
 mv /var/opt/google /usr/lib/opt/google
 printf "L /var/opt/google - - - - /usr/lib/opt/google\n" > /usr/lib/tmpfiles.d/google-chrome.conf
 
-
-### Generate Chrome Enterprise Policy for M365 PWAs (zero external URLs or file:// paths)
-mkdir -p /etc/opt/chrome/policies/managed
+### Store Chrome Enterprise Policy in /usr/share and link into /etc via tmpfiles.d
+mkdir -p /usr/share/corp-chrome
 python3 - << 'PYEOF'
-import json, zlib, struct, base64
-
-def png_data_uri(r, g, b):
-    w = h = 192
-    raw = b"".join(b"\x00" + bytes([r, g, b]) * w for _ in range(h))
-    def chunk(tag, data):
-        return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", zlib.crc32(tag + data) & 0xffffffff)
-    ihdr = struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
-    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+import json
 
 p = "https" + "://"
 policy = {
     "WebAppInstallForceList": [
         {
-            "url": p + "outlook.cloud.microsoft/mail/",
+            "url": p + "://office.com",
             "custom_name": "Outlook",
-            "custom_icon": {"url": png_data_uri(0, 120, 212)},
             "default_launch_container": "window",
             "create_desktop_shortcut": True
         },
@@ -69,39 +58,41 @@ policy = {
             "create_desktop_shortcut": True
         },
         {
-            "url": p + "word.cloud.microsoft/",
+            "url": p + "://office.com",
             "custom_name": "Microsoft Word",
-            "custom_icon": {"url": png_data_uri(43, 87, 154)},
             "default_launch_container": "window",
             "create_desktop_shortcut": True
         },
         {
-            "url": p + "excel.cloud.microsoft/",
+            "url": p + "://office.com",
             "custom_name": "Microsoft Excel",
-            "custom_icon": {"url": png_data_uri(33, 115, 70)},
             "default_launch_container": "window",
             "create_desktop_shortcut": True
         },
         {
-            "url": p + "powerpoint.cloud.microsoft/",
+            "url": p + "://office.com",
             "custom_name": "Microsoft PowerPoint",
-            "custom_icon": {"url": png_data_uri(183, 71, 42)},
             "default_launch_container": "window",
             "create_desktop_shortcut": True
         },
         {
             "url": p + "://live.com",
             "custom_name": "OneDrive",
-            "custom_icon": {"url": png_data_uri(9, 74, 178)},
             "default_launch_container": "window",
             "create_desktop_shortcut": True
         }
     ]
 }
 
-with open("/etc/opt/chrome/policies/managed/m365_pwas.json", "w") as f:
+with open("/usr/share/corp-chrome/m365_pwas.json", "w") as f:
     json.dump(policy, f, indent=2)
 PYEOF
+
+cat << 'EOF' > /usr/lib/tmpfiles.d/corp-chrome-policy.conf
+d /etc/opt/chrome/policies/managed 0755 root root -
+L+ /etc/opt/chrome/policies/managed/m365_pwas.json - - - - /usr/share/corp-chrome/m365_pwas.json
+EOF
+
 
 
 
