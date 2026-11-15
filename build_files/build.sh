@@ -30,17 +30,24 @@ systemctl enable podman.socket
 ### ENTERPRISE CUSTOMIZATIONS: CHROME, M365 PWAS, AND ONLYOFFICE
 ### ----------------------------------------------------------------------------
 
-# 1. Install Google Chrome via official RPM repository
-cat << 'CHROME_REPO' > /etc/yum.repos.d/google-chrome.repo
+### Install Google Chrome safely for bootc/ostree (/opt -> /usr/lib/opt)
+mkdir -p /var/opt /usr/lib/opt
+cat << 'EOF' > /etc/yum.repos.d/google-chrome.repo
 [google-chrome]
 name=google-chrome
-baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+baseurl=https://google.com
 enabled=1
 gpgcheck=1
-gpgkey=https://dl.google.com/linux/linux_signing_key.pub
-CHROME_REPO
-mkdir -p /var/opt
+gpgkey=https://google.com
+EOF
 dnf5 install -y google-chrome-stable
+
+# Move Chrome from /var/opt to /usr/lib/opt so it survives image sealing
+mv /var/opt/google /usr/lib/opt/google
+cat << 'EOF' > /usr/lib/tmpfiles.d/google-chrome.conf
+L /var/opt/google - - - - /usr/lib/opt/google
+EOF
+
 
 # 2. Pre-configure Chrome Enterprise Policy for Microsoft 365 PWAs
 mkdir -p /etc/opt/chrome/policies/managed
