@@ -37,31 +37,76 @@ dnf5 install -y google-chrome-stable
 mv /var/opt/google /usr/lib/opt/google
 printf "L /var/opt/google - - - - /usr/lib/opt/google\n" > /usr/lib/tmpfiles.d/google-chrome.conf
 
+### Download Microsoft 365 icons locally into the OS image
+mkdir -p /usr/share/pixmaps/m365
+curl -sL "https://office.net" -o /usr/share/pixmaps/m365/outlook.png
+curl -sL "https://office.net" -o /usr/share/pixmaps/m365/word.png
+curl -sL "https://office.net" -o /usr/share/pixmaps/m365/excel.png
+curl -sL "https://office.net" -o /usr/share/pixmaps/m365/powerpoint.png
+curl -sL "https://office.net" -o /usr/share/pixmaps/m365/onedrive.png
 
-
-# 2. Pre-configure Chrome Enterprise Policy for Microsoft 365 PWAs
+### Pre-configure Chrome Enterprise Policy for all Microsoft 365 PWAs
 mkdir -p /etc/opt/chrome/policies/managed
-cat << 'M365_POLICY' > /etc/opt/chrome/policies/managed/m365_pwas.json
+cat << 'EOF' > /etc/opt/chrome/policies/managed/m365_pwas.json
 {
   "WebAppInstallForceList": [
     {
-      "url": "https://outlook.office.com/mail/",
+      "url": "https://office.com",
+      "custom_name": "Outlook",
+      "custom_icon": {
+        "url": "file:///usr/share/pixmaps/m365/outlook.png"
+      },
       "default_launch_container": "window",
       "create_desktop_shortcut": true
     },
     {
-      "url": "https://teams.microsoft.com/",
+      "url": "https://microsoft.com",
+      "custom_name": "Microsoft Teams",
       "default_launch_container": "window",
       "create_desktop_shortcut": true
     },
     {
-      "url": "https://www.office.com/",
+      "url": "https://office.com",
+      "custom_name": "Microsoft Word",
+      "custom_icon": {
+        "url": "file:///usr/share/pixmaps/m365/word.png"
+      },
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://office.com",
+      "custom_name": "Microsoft Excel",
+      "custom_icon": {
+        "url": "file:///usr/share/pixmaps/m365/excel.png"
+      },
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://office.com",
+      "custom_name": "Microsoft PowerPoint",
+      "custom_icon": {
+        "url": "file:///usr/share/pixmaps/m365/powerpoint.png"
+      },
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://live.com",
+      "custom_name": "OneDrive",
+      "custom_icon": {
+        "url": "file:///usr/share/pixmaps/m365/onedrive.png"
+      },
       "default_launch_container": "window",
       "create_desktop_shortcut": true
     }
   ]
 }
-M365_POLICY
+EOF
+
+
+
 
 # 3. Pre-install ONLYOFFICE Desktop Editors via Flatpak on first boot
 cat << 'FLATPAK_SVC' > /etc/systemd/system/install-corp-flatpaks.service
