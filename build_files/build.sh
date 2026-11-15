@@ -37,61 +37,35 @@ dnf5 install -y google-chrome-stable
 mv /var/opt/google /usr/lib/opt/google
 printf "L /var/opt/google - - - - /usr/lib/opt/google\n" > /usr/lib/tmpfiles.d/google-chrome.conf
 
-### Store Chrome Enterprise Policy in /usr/share and link into /etc via tmpfiles.d
-mkdir -p /usr/share/corp-chrome
-python3 - << 'PYEOF'
-import json
 
-p = "https" + "://"
-policy = {
-    "WebAppInstallForceList": [
-        {
-            "url": p + "://office.com",
-            "custom_name": "Outlook",
-            "default_launch_container": "window",
-            "create_desktop_shortcut": True
-        },
-        {
-            "url": p + "://microsoft.com",
-            "custom_name": "Microsoft Teams",
-            "default_launch_container": "window",
-            "create_desktop_shortcut": True
-        },
-        {
-            "url": p + "://office.com",
-            "custom_name": "Microsoft Word",
-            "default_launch_container": "window",
-            "create_desktop_shortcut": True
-        },
-        {
-            "url": p + "://office.com",
-            "custom_name": "Microsoft Excel",
-            "default_launch_container": "window",
-            "create_desktop_shortcut": True
-        },
-        {
-            "url": p + "://office.com",
-            "custom_name": "Microsoft PowerPoint",
-            "default_launch_container": "window",
-            "create_desktop_shortcut": True
-        },
-        {
-            "url": p + "://live.com",
-            "custom_name": "OneDrive",
-            "default_launch_container": "window",
-            "create_desktop_shortcut": True
-        }
-    ]
+### Create native KDE desktop app launchers for Microsoft 365 (opens in standalone Chrome app windows)
+mkdir -p /usr/share/applications
+
+create_m365_app() {
+  local id="$1"
+  local name="$2"
+  local url="$3"
+  cat << EOF > "/usr/share/applications/corp-${id}.desktop"
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=${name}
+Comment=Microsoft ${name} Web App
+Exec=/usr/lib/opt/google/chrome/google-chrome --app=${url}
+Icon=web-browser
+Categories=Office;Network;
+Terminal=false
+StartupNotify=true
+EOF
 }
 
-with open("/usr/share/corp-chrome/m365_pwas.json", "w") as f:
-    json.dump(policy, f, indent=2)
-PYEOF
-
-cat << 'EOF' > /usr/lib/tmpfiles.d/corp-chrome-policy.conf
-d /etc/opt/chrome/policies/managed 0755 root root -
-L+ /etc/opt/chrome/policies/managed/m365_pwas.json - - - - /usr/share/corp-chrome/m365_pwas.json
-EOF
+p="https"
+create_m365_app "outlook" "Outlook" "${p}://://office.com"
+create_m365_app "teams" "Microsoft Teams" "${p}://://microsoft.com"
+create_m365_app "word" "Microsoft Word" "${p}://://office.com"
+create_m365_app "excel" "Microsoft Excel" "${p}://://office.com"
+create_m365_app "powerpoint" "Microsoft PowerPoint" "${p}://://office.com"
+create_m365_app "onedrive" "OneDrive" "${p}://m365.cloud.microsoft/onedrive"
 
 
 
