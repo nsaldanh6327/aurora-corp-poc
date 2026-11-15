@@ -38,36 +38,49 @@ mv /var/opt/google /usr/lib/opt/google
 printf "L /var/opt/google - - - - /usr/lib/opt/google\n" > /usr/lib/tmpfiles.d/google-chrome.conf
 
 
-### Create native KDE desktop app launchers for Microsoft 365 (opens in standalone Chrome app windows)
-mkdir -p /usr/share/applications
+### 1. Store Microsoft Edge Enterprise Policy in /usr/share and link into /etc via tmpfiles.d
+mkdir -p /usr/share/corp-edge
+python3 - << 'PYEOF'
+import json
 
-create_m365_app() {
-  local id="$1"
-  local name="$2"
-  local url="$3"
-  cat << EOF > "/usr/share/applications/corp-${id}.desktop"
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=${name}
-Comment=Microsoft ${name} Web App
-Exec=/usr/lib/opt/google/chrome/google-chrome --app=${url}
-Icon=web-browser
-Categories=Office;Network;
-Terminal=false
-StartupNotify=true
-EOF
+p = "https" + "://"
+policy = {
+    "WebAppInstallForceList": [
+        {"url": p + "outlook.cloud.microsoft/mail/", "default_launch_container": "window", "create_desktop_shortcut": True},
+        {"url": p + "://microsoft.com", "default_launch_container": "window", "create_desktop_shortcut": True},
+        {"url": p + "word.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True},
+        {"url": p + "excel.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True},
+        {"url": p + "powerpoint.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True},
+        {"url": p + "m365.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True}
+    ]
 }
 
-p="https"
-create_m365_app "outlook" "Outlook" "${p}://://office.com"
-create_m365_app "teams" "Microsoft Teams" "${p}://://microsoft.com"
-create_m365_app "word" "Microsoft Word" "${p}://://office.com"
-create_m365_app "excel" "Microsoft Excel" "${p}://://office.com"
-create_m365_app "powerpoint" "Microsoft PowerPoint" "${p}://://office.com"
-create_m365_app "onedrive" "OneDrive" "${p}://m365.cloud.microsoft/onedrive"
+with open("/usr/share/corp-edge/m365_pwas.json", "w") as f:
+    json.dump(policy, f, indent=2)
+PYEOF
 
+cat << 'EOF' > /usr/lib/tmpfiles.d/corp-edge-policy.conf
+d /etc/opt/edge/policies/managed 0755 root root -
+L+ /etc/opt/edge/policies/managed/m365_pwas.json - - - - /usr/share/corp-edge/m365_pwas.json
+EOF
 
+### 2. Install Microsoft Edge + ONLYOFFICE Flatpaks and expose policy folder on first boot
+cat << 'EOF' > /etc/systemd/system/install-corp-flatpaks.service
+[Unit]
+Description=Install Corporate Flatpaks (Microsoft Edge and ONLYOFFICE)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flatpak install -y --noninteractive flathub com.microsoft.Edge org.onlyoffice.desktopeditors
+ExecStart=/usr/bin/flatpak override --system --filesystem=/etc/opt/edge/policies/managed:ro com.microsoft.Edge
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable install-corp-flatpaks.service
 
 
 
