@@ -25,3 +25,59 @@ dnf5 install -y tmux
 #### Example for enabling a System Unit File
 
 systemctl enable podman.socket
+
+### ----------------------------------------------------------------------------
+### ENTERPRISE CUSTOMIZATIONS: CHROME, M365 PWAS, AND ONLYOFFICE
+### ----------------------------------------------------------------------------
+
+# 1. Install Google Chrome via official RPM repository
+cat << 'CHROME_REPO' > /etc/yum.repos.d/google-chrome.repo
+[google-chrome]
+name=google-chrome
+baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+CHROME_REPO
+dnf5 install -y google-chrome-stable
+
+# 2. Pre-configure Chrome Enterprise Policy for Microsoft 365 PWAs
+mkdir -p /etc/opt/chrome/policies/managed
+cat << 'M365_POLICY' > /etc/opt/chrome/policies/managed/m365_pwas.json
+{
+  "WebAppInstallForceList": [
+    {
+      "url": "https://outlook.office.com/mail/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://teams.microsoft.com/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://www.office.com/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    }
+  ]
+}
+M365_POLICY
+
+# 3. Pre-install ONLYOFFICE Desktop Editors via Flatpak on first boot
+cat << 'FLATPAK_SVC' > /etc/systemd/system/install-corp-flatpaks.service
+[Unit]
+Description=Install Corporate Flatpaks (ONLYOFFICE)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flatpak install -y --noninteractive flathub org.onlyoffice.desktopeditors
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+FLATPAK_SVC
+systemctl enable install-corp-flatpaks.service
