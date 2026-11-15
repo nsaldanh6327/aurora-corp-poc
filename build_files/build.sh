@@ -37,77 +37,71 @@ dnf5 install -y google-chrome-stable
 mv /var/opt/google /usr/lib/opt/google
 printf "L /var/opt/google - - - - /usr/lib/opt/google\n" > /usr/lib/tmpfiles.d/google-chrome.conf
 
-### Generate crisp M365 app icons locally using Python (no external URLs needed)
-mkdir -p /usr/share/pixmaps/m365
-python3 - << 'PYEOF'
-import zlib, struct
 
-def make_png(path, r, g, b):
+### Generate Chrome Enterprise Policy for M365 PWAs (zero external URLs or file:// paths)
+mkdir -p /etc/opt/chrome/policies/managed
+python3 - << 'PYEOF'
+import json, zlib, struct, base64
+
+def png_data_uri(r, g, b):
     w = h = 192
     raw = b"".join(b"\x00" + bytes([r, g, b]) * w for _ in range(h))
     def chunk(tag, data):
         return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", zlib.crc32(tag + data) & 0xffffffff)
     ihdr = struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)
-    with open(path, "wb") as f:
-        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
-make_png("/usr/share/pixmaps/m365/outlook.png", 0, 120, 212)     # Outlook Blue
-make_png("/usr/share/pixmaps/m365/word.png", 43, 87, 154)        # Word Blue
-make_png("/usr/share/pixmaps/m365/excel.png", 33, 115, 70)       # Excel Green
-make_png("/usr/share/pixmaps/m365/powerpoint.png", 183, 71, 42)  # PowerPoint Orange
-make_png("/usr/share/pixmaps/m365/onedrive.png", 9, 74, 178)     # OneDrive Navy
-PYEOF
-
-### Configure Chrome Enterprise Policy for all 6 Microsoft 365 PWAs
-mkdir -p /etc/opt/chrome/policies/managed
-H="https"
-cat << EOF > /etc/opt/chrome/policies/managed/m365_pwas.json
-{
-  "WebAppInstallForceList": [
-    {
-      "url": "${H}://://office.com",
-      "custom_name": "Outlook",
-      "custom_icon": { "url": "file:///usr/share/pixmaps/m365/outlook.png" },
-      "default_launch_container": "window",
-      "create_desktop_shortcut": true
-    },
-    {
-      "url": "${H}://://microsoft.com",
-      "custom_name": "Microsoft Teams",
-      "default_launch_container": "window",
-      "create_desktop_shortcut": true
-    },
-    {
-      "url": "${H}://://office.com",
-      "custom_name": "Microsoft Word",
-      "custom_icon": { "url": "file:///usr/share/pixmaps/m365/word.png" },
-      "default_launch_container": "window",
-      "create_desktop_shortcut": true
-    },
-    {
-      "url": "${H}://://office.com",
-      "custom_name": "Microsoft Excel",
-      "custom_icon": { "url": "file:///usr/share/pixmaps/m365/excel.png" },
-      "default_launch_container": "window",
-      "create_desktop_shortcut": true
-    },
-    {
-      "url": "${H}://://office.com",
-      "custom_name": "Microsoft PowerPoint",
-      "custom_icon": { "url": "file:///usr/share/pixmaps/m365/powerpoint.png" },
-      "default_launch_container": "window",
-      "create_desktop_shortcut": true
-    },
-    {
-      "url": "${H}://m365.cloud.microsoft/onedrive",
-      "custom_name": "OneDrive",
-      "custom_icon": { "url": "file:///usr/share/pixmaps/m365/onedrive.png" },
-      "default_launch_container": "window",
-      "create_desktop_shortcut": true
-    }
-  ]
+p = "https" + "://"
+policy = {
+    "WebAppInstallForceList": [
+        {
+            "url": p + "outlook.cloud.microsoft/mail/",
+            "custom_name": "Outlook",
+            "custom_icon": {"url": png_data_uri(0, 120, 212)},
+            "default_launch_container": "window",
+            "create_desktop_shortcut": True
+        },
+        {
+            "url": p + "://microsoft.com",
+            "custom_name": "Microsoft Teams",
+            "default_launch_container": "window",
+            "create_desktop_shortcut": True
+        },
+        {
+            "url": p + "word.cloud.microsoft/",
+            "custom_name": "Microsoft Word",
+            "custom_icon": {"url": png_data_uri(43, 87, 154)},
+            "default_launch_container": "window",
+            "create_desktop_shortcut": True
+        },
+        {
+            "url": p + "excel.cloud.microsoft/",
+            "custom_name": "Microsoft Excel",
+            "custom_icon": {"url": png_data_uri(33, 115, 70)},
+            "default_launch_container": "window",
+            "create_desktop_shortcut": True
+        },
+        {
+            "url": p + "powerpoint.cloud.microsoft/",
+            "custom_name": "Microsoft PowerPoint",
+            "custom_icon": {"url": png_data_uri(183, 71, 42)},
+            "default_launch_container": "window",
+            "create_desktop_shortcut": True
+        },
+        {
+            "url": p + "://live.com",
+            "custom_name": "OneDrive",
+            "custom_icon": {"url": png_data_uri(9, 74, 178)},
+            "default_launch_container": "window",
+            "create_desktop_shortcut": True
+        }
+    ]
 }
-EOF
+
+with open("/etc/opt/chrome/policies/managed/m365_pwas.json", "w") as f:
+    json.dump(policy, f, indent=2)
+PYEOF
 
 
 
