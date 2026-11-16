@@ -12,6 +12,11 @@ COPY m365_pwas.json /usr/share/edge-policy/m365_pwas.json
 COPY edge-policy.service /usr/lib/systemd/system/edge-policy.service
 RUN systemctl enable edge-policy.service
 
+COPY system_files/usr/libexec/rexel-set-icons.sh /usr/libexec/rexel-set-icons.sh
+COPY system_files/usr/lib/systemd/user/rexel-icons.service /usr/lib/systemd/user/rexel-icons.service
+RUN chmod 0755 /usr/libexec/rexel-set-icons.sh && \
+    mkdir -p /usr/lib/systemd/user/default.target.wants && \
+    ln -sf ../rexel-icons.service /usr/lib/systemd/user/default.target.wants/rexel-icons.service
 
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
