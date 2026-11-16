@@ -1,0 +1,11 @@
+[Unit]
+Description=Install Edge M365 PWA policy
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/mkdir -p /etc/opt/edge/policies/managed
+ExecStart=/usr/bin/cp -f /usr/share/edge-policy/m365_pwas.json /etc/opt/edge/policies/managed/m365_pwas.json
+
+[Install]
+WantedBy=multi-user.target
