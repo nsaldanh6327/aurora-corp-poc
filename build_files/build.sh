@@ -5,8 +5,8 @@ set -ouex pipefail
 cp -avf /ctx/system_files/. /
 
 ### ----------------------------------------------------------------------------
-### /opt is a symlink to /var/opt on ostree. RPM can't unpack into it during
-### the build, so use a real /opt for the install and restore the link after.
+### /opt is a symlink to /var/opt on ostree. Use a real /opt for the RPM
+### install, then move the files into the image and restore the link.
 ### ----------------------------------------------------------------------------
 
 if [ -L /opt ]; then
@@ -51,11 +51,9 @@ for d in google microsoft; do
     fi
 done
 
-# Only remove /opt if it's empty, then restore the symlink
 rmdir /opt
 ln -s var/opt /opt
 
-# Recreate /var/opt links at boot
 mkdir -p /usr/lib/tmpfiles.d
 cat > /usr/lib/tmpfiles.d/corp-browsers.conf <<'EOF'
 d /var/opt 0755 root root -
@@ -64,8 +62,7 @@ L /var/opt/microsoft - - - - /usr/lib/opt/microsoft
 EOF
 
 ### ----------------------------------------------------------------------------
-### Managed policies: real files in /usr/etc (ostree default for /etc)
-### Edge and Chrome read /etc/opt/.../policies/managed at launch.
+### Managed policies: real files in /etc/opt (supported by bootc lint)
 ### ----------------------------------------------------------------------------
 
 M365_POLICY=/tmp/m365_pwas.json
@@ -85,7 +82,7 @@ EOF
 # Fail the build if the JSON is invalid
 python3 -m json.tool "$M365_POLICY" > /dev/null
 
-for dir in /usr/etc/opt/edge/policies/managed /usr/etc/opt/chrome/policies/managed; do
+for dir in /etc/opt/edge/policies/managed /etc/opt/chrome/policies/managed; do
     mkdir -p "$dir"
     install -m 0644 "$M365_POLICY" "$dir/m365_pwas.json"
 done
@@ -108,8 +105,8 @@ Branch=stable
 EOF
 
 ### ----------------------------------------------------------------------------
-### Cleanup
+### Cleanup: remove runtime and dnf state that lint flags
 ### ----------------------------------------------------------------------------
 
 dnf5 clean all
-rm -rf /var/cache/* /var/log/dnf* 2>/dev/null || true
+rm -rf /var/cache/* /var/log/dnf* /var/lib/dnf/repos /run/dnf 2>/dev/null || true
