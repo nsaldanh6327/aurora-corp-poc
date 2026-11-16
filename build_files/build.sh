@@ -1,103 +1,95 @@
 #!/bin/bash
-
 set -ouex pipefail
 
-# Copy the contents of system_files/ of the git repo to /
-cp -avf "/ctx/system_files"/. /
-
-### Install packages
-
-# Packages can be installed from any enabled yum repo on the image.
-# RPMfusion repos are available by default in ublue main images
-# List of rpmfusion packages can be found here:
-# https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/43/x86_64/repoview/index.html&protocol=https&redirect=1
-
-# this installs a package from fedora repos
-dnf5 install -y tmux
-
-# Use a COPR Example:
-#
-# dnf5 -y copr enable ublue-os/staging
-# dnf5 -y install package
-# Disable COPRs so they don't end up enabled on the final image:
-# dnf5 -y copr disable ublue-os/staging
-
-#### Example for enabling a System Unit File
-
-systemctl enable podman.socket
+# Copy system_files/ from the repo into /
+cp -avf /ctx/system_files/. /
 
 ### ----------------------------------------------------------------------------
-### ENTERPRISE CUSTOMIZATIONS: CHROME, M365 PWAS, AND ONLYOFFICE
+### Vendor repos (official RPMs, vendor-signed)
 ### ----------------------------------------------------------------------------
 
-mkdir -p /var/opt /usr/lib/opt
-dnf5 install -y fedora-workstation-repositories
-dnf5 config-manager setopt google-chrome.enabled=1
-dnf5 install -y google-chrome-stable
-mv /var/opt/google /usr/lib/opt/google
-printf "L /var/opt/google - - - - /usr/lib/opt/google\n" > /usr/lib/tmpfiles.d/google-chrome.conf
+cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
+[google-chrome]
+name=Google Chrome
+baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+EOF
 
+cat > /etc/yum.repos.d/microsoft-edge.repo <<'EOF'
+[microsoft-edge]
+name=Microsoft Edge
+baseurl=https://packages.microsoft.com/yumrepos/edge
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+EOF
 
-### 1. Store Microsoft Edge Enterprise Policy in /usr/share and link into /etc via tmpfiles.d
-mkdir -p /usr/share/corp-edge
-python3 - << 'PYEOF'
-import json
+dnf5 install -y google-chrome-stable microsoft-edge-stable
+rpm -q google-chrome-stable microsoft-edge-stable
 
-p = "https" + "://"
-policy = {
-    "WebAppInstallForceList": [
-        {"url": p + "outlook.cloud.microsoft/mail/", "default_launch_container": "window", "create_desktop_shortcut": True},
-        {"url": p + "://microsoft.com", "default_launch_container": "window", "create_desktop_shortcut": True},
-        {"url": p + "word.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True},
-        {"url": p + "excel.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True},
-        {"url": p + "powerpoint.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True},
-        {"url": p + "m365.cloud.microsoft/", "default_launch_container": "window", "create_desktop_shortcut": True}
-    ]
+# Remove vendor repos so browser updates come only from image rebuilds
+rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
+
+### ----------------------------------------------------------------------------
+### RPM installs to /opt, which is /var/opt on ostree. Move it into the image.
+### ----------------------------------------------------------------------------
+
+mkdir -p /usr/lib/opt
+if [ -d /var/opt/google ]; then
+    mv /var/opt/google /usr/lib/opt/google
+fi
+mkdir -p /usr/lib/tmpfiles.d
+echo "L /var/opt/google - - - - /usr/lib/opt/google" > /usr/lib/tmpfiles.d/google-chrome.conf
+
+### ----------------------------------------------------------------------------
+### Managed policies: real files in /usr/etc (ostree default for /etc)
+### Edge and Chrome read /etc/opt/.../policies/managed at launch.
+### ----------------------------------------------------------------------------
+
+M365_POLICY=/tmp/m365_pwas.json
+cat > "$M365_POLICY" <<'EOF'
+{
+  "WebAppInstallForceList": [
+    {"url": "https://outlook.cloud.microsoft/mail/", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://teams.microsoft.com/v2/", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://onedrive.live.com/", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://word.cloud.microsoft/", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://excel.cloud.microsoft/", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://powerpoint.cloud.microsoft/", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
+  ]
 }
-
-with open("/usr/share/corp-edge/m365_pwas.json", "w") as f:
-    json.dump(policy, f, indent=2)
-PYEOF
-
-cat << 'EOF' > /usr/lib/tmpfiles.d/corp-edge-policy.conf
-d /etc/opt/edge/policies/managed 0755 root root -
-L+ /etc/opt/edge/policies/managed/m365_pwas.json - - - - /usr/share/corp-edge/m365_pwas.json
 EOF
 
-### 2. Install Microsoft Edge + ONLYOFFICE Flatpaks and expose policy folder on first boot
-cat << 'EOF' > /etc/systemd/system/install-corp-flatpaks.service
-[Unit]
-Description=Install Corporate Flatpaks (Microsoft Edge and ONLYOFFICE)
-After=network-online.target
-Wants=network-online.target
+# Fail the build if the JSON is invalid
+python3 -m json.tool "$M365_POLICY" > /dev/null
 
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/flatpak install -y --noninteractive flathub com.microsoft.Edge org.onlyoffice.desktopeditors
-ExecStart=/usr/bin/flatpak override --system --filesystem=/etc/opt/edge/policies/managed:ro com.microsoft.Edge
-RemainAfterExit=yes
+for dir in /usr/etc/opt/edge/policies/managed /usr/etc/opt/chrome/policies/managed; do
+    mkdir -p "$dir"
+    install -m 0644 "$M365_POLICY" "$dir/m365_pwas.json"
+done
+rm -f "$M365_POLICY"
 
-[Install]
-WantedBy=multi-user.target
+### ----------------------------------------------------------------------------
+### ONLYOFFICE: Flatpak preinstall on first boot (no custom service)
+### ----------------------------------------------------------------------------
+
+mkdir -p /usr/share/flatpak/preinstall.d /usr/share/flatpak/remotes.d
+cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<'EOF'
+[Flatpak Repo]
+Title=Flathub
+Url=https://dl.flathub.org/repo/
+Homepage=https://flathub.org/
 EOF
-systemctl enable install-corp-flatpaks.service
+cat > /usr/share/flatpak/preinstall.d/onlyoffice.preinstall <<'EOF'
+[Flatpak Preinstall org.onlyoffice.desktopeditors]
+Branch=stable
+EOF
 
+### ----------------------------------------------------------------------------
+### Cleanup
+### ----------------------------------------------------------------------------
 
-
-
-# 3. Pre-install ONLYOFFICE Desktop Editors via Flatpak on first boot
-cat << 'FLATPAK_SVC' > /etc/systemd/system/install-corp-flatpaks.service
-[Unit]
-Description=Install Corporate Flatpaks (ONLYOFFICE)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/flatpak install -y --noninteractive flathub org.onlyoffice.desktopeditors
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-FLATPAK_SVC
-systemctl enable install-corp-flatpaks.service
+dnf5 clean all
+rm -rf /var/cache/* /var/log/dnf* 2>/dev/null || true
