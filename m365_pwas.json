@@ -1,0 +1,54 @@
+{
+  "WebAppInstallForceList": [
+    {
+      "url": "https://outlook.office.com/mail/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://outlook.office.com/calendar/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://teams.microsoft.com/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://www.office.com/launch/word",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://www.office.com/launch/excel",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://www.office.com/launch/powerpoint",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://www.onenote.com/notebooks",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://onedrive.live.com/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://tasks.office.com/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    },
+    {
+      "url": "https://rexel.sharepoint.com/",
+      "default_launch_container": "window",
+      "create_desktop_shortcut": true
+    }
+  ]
+}
