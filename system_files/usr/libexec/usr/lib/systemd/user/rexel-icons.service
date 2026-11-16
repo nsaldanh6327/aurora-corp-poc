@@ -1,0 +1,10 @@
+[Unit]
+Description=Set Rexel icons on Edge web app shortcuts
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/rexel-set-icons.sh
+
+[Install]
+WantedBy=default.target
