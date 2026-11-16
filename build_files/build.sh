@@ -5,8 +5,16 @@ set -ouex pipefail
 cp -avf /ctx/system_files/. /
 
 ### ----------------------------------------------------------------------------
-### Vendor repos (official RPMs, vendor-signed)
+### /opt is a symlink to /var/opt on ostree. RPM can't unpack into it during
+### the build, so use a real /opt for the install and restore the link after.
 ### ----------------------------------------------------------------------------
+
+if [ -L /opt ]; then
+    rm -f /opt
+    mkdir /opt
+fi
+
+### Vendor repos (official RPMs, vendor-signed)
 
 cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
 [google-chrome]
@@ -33,15 +41,27 @@ rpm -q google-chrome-stable microsoft-edge-stable
 rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 
 ### ----------------------------------------------------------------------------
-### RPM installs to /opt, which is /var/opt on ostree. Move it into the image.
+### Move browser files into the image and restore /opt -> /var/opt
 ### ----------------------------------------------------------------------------
 
 mkdir -p /usr/lib/opt
-if [ -d /var/opt/google ]; then
-    mv /var/opt/google /usr/lib/opt/google
-fi
+for d in google microsoft; do
+    if [ -d "/opt/$d" ]; then
+        mv "/opt/$d" "/usr/lib/opt/$d"
+    fi
+done
+
+# Only remove /opt if it's empty, then restore the symlink
+rmdir /opt
+ln -s var/opt /opt
+
+# Recreate /var/opt links at boot
 mkdir -p /usr/lib/tmpfiles.d
-echo "L /var/opt/google - - - - /usr/lib/opt/google" > /usr/lib/tmpfiles.d/google-chrome.conf
+cat > /usr/lib/tmpfiles.d/corp-browsers.conf <<'EOF'
+d /var/opt 0755 root root -
+L /var/opt/google - - - - /usr/lib/opt/google
+L /var/opt/microsoft - - - - /usr/lib/opt/microsoft
+EOF
 
 ### ----------------------------------------------------------------------------
 ### Managed policies: real files in /usr/etc (ostree default for /etc)
@@ -72,7 +92,7 @@ done
 rm -f "$M365_POLICY"
 
 ### ----------------------------------------------------------------------------
-### ONLYOFFICE: Flatpak preinstall on first boot (no custom service)
+### ONLYOFFICE: Flatpak preinstall on first boot
 ### ----------------------------------------------------------------------------
 
 mkdir -p /usr/share/flatpak/preinstall.d /usr/share/flatpak/remotes.d
