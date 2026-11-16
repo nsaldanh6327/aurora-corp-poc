@@ -4,7 +4,7 @@ After=graphical-session.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/rexel-set-icons.sh
+ExecStart=/bin/bash /usr/libexec/rexel-set-icons.sh
 
 [Install]
 WantedBy=default.target
