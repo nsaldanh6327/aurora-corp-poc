@@ -34,7 +34,22 @@ gpgcheck=1
 gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 EOF
 
-dnf5 install -y google-chrome-stable microsoft-edge-stable
+# Retry with increasing backoff (covers HTTP 429 from packages.microsoft.com)
+retry() {
+    local n=0
+    until "$@"; do
+        n=$((n+1))
+        if [ "$n" -ge 5 ]; then
+            echo "ERROR: failed after $n attempts: $*" >&2
+            return 1
+        fi
+        echo "Attempt $n failed, retrying in $((n*60))s..."
+        sleep $((n*60))
+    done
+}
+
+retry dnf5 install -y --setopt=retries=10 google-chrome-stable
+retry dnf5 install -y --setopt=retries=10 microsoft-edge-stable
 rpm -q google-chrome-stable microsoft-edge-stable
 
 # Remove vendor repos so browser updates come only from image rebuilds
