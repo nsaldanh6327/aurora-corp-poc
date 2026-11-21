@@ -104,21 +104,37 @@ done
 rm -f "$M365_POLICY"
 
 ### ----------------------------------------------------------------------------
-### GNOME defaults: dock favorites via dconf (applied at build time)
+### KDE taskbar defaults: Plasma task manager launchers (system-wide default)
+### Only the "launchers" entry is changed. Fails the build if it isn't found.
 ### ----------------------------------------------------------------------------
 
-mkdir -p /etc/dconf/profile /etc/dconf/db/local.d
-cat > /etc/dconf/profile/user <<'EOF'
-user-db:user
-system-db:local
-EOF
+TM_XML=/usr/share/plasma/plasmoids/org.kde.plasma.taskmanager/contents/config/main.xml
+python3 - "$TM_XML" <<'PYEOF'
+import sys
+import xml.etree.ElementTree as ET
 
-cat > /etc/dconf/db/local.d/00-favorites <<'EOF'
-[org/gnome/shell]
-favorite-apps=['google-chrome.desktop', 'microsoft-edge.desktop']
-EOF
+path = sys.argv[1]
+tree = ET.parse(path)
+root = tree.getroot()
+ns = {"k": "http://www.kde.org/standards/kcfg/1.0"}
 
-dconf update
+found = False
+for entry in root.iter("{http://www.kde.org/standards/kcfg/1.0}entry"):
+    if entry.get("name") == "launchers":
+        default = entry.find("{http://www.kde.org/standards/kcfg/1.0}default")
+        if default is None:
+            default = ET.SubElement(entry, "{http://www.kde.org/standards/kcfg/1.0}default")
+        default.text = ",".join([
+            "applications:google-chrome.desktop",
+            "applications:microsoft-edge.desktop",
+        ])
+        found = True
+
+if not found:
+    sys.exit("ERROR: 'launchers' entry not found in " + path)
+
+tree.write(path, xml_declaration=True, encoding="UTF-8")
+PYEOF
 
 ### ----------------------------------------------------------------------------
 ### ONLYOFFICE: Flatpak preinstall on first boot
@@ -142,4 +158,3 @@ EOF
 
 dnf5 clean all
 rm -rf /var/cache/* /var/log/dnf* /var/lib/dnf/repos /run/dnf 2>/dev/null || true
-
