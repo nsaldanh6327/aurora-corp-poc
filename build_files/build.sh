@@ -104,26 +104,29 @@ done
 rm -f "$M365_POLICY"
 
 ### ----------------------------------------------------------------------------
-### KDE taskbar defaults: Plasma task manager launchers (system-wide default)
-### Only the "launchers" entry is changed. Fails the build if it isn't found.
+### KDE taskbar defaults: icontasks (task manager) launchers
 ### ----------------------------------------------------------------------------
 
-TM_XML=/usr/share/plasma/plasmoids/org.kde.plasma.taskmanager/contents/config/main.xml
+TM_XML=/usr/share/plasma/plasmoids/org.kde.plasma.icontasks/contents/config/main.xml
+[ -f "$TM_XML" ] || { echo "ERROR: $TM_XML not found" >&2; exit 1; }
+
 python3 - "$TM_XML" <<'PYEOF'
 import sys
 import xml.etree.ElementTree as ET
 
 path = sys.argv[1]
+NS = "http://www.kde.org/standards/kcfg/1.0"
+ET.register_namespace("", NS)
+
 tree = ET.parse(path)
 root = tree.getroot()
-ns = {"k": "http://www.kde.org/standards/kcfg/1.0"}
 
 found = False
-for entry in root.iter("{http://www.kde.org/standards/kcfg/1.0}entry"):
+for entry in root.iter("{%s}entry" % NS):
     if entry.get("name") == "launchers":
-        default = entry.find("{http://www.kde.org/standards/kcfg/1.0}default")
+        default = entry.find("{%s}default" % NS)
         if default is None:
-            default = ET.SubElement(entry, "{http://www.kde.org/standards/kcfg/1.0}default")
+            default = ET.SubElement(entry, "{%s}default" % NS)
         default.text = ",".join([
             "applications:google-chrome.desktop",
             "applications:microsoft-edge.desktop",
@@ -135,6 +138,7 @@ if not found:
 
 tree.write(path, xml_declaration=True, encoding="UTF-8")
 PYEOF
+
 
 ### ----------------------------------------------------------------------------
 ### ONLYOFFICE: Flatpak preinstall on first boot
