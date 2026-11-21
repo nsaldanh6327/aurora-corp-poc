@@ -129,6 +129,83 @@ Terminal=false
 EOF
 done
 
+### ----------------------------------------------------------------------------
+### First-login taskbar pinning (per user, runs once)
+### ----------------------------------------------------------------------------
+
+cat > /usr/libexec/rexel-pin-taskbar.py <<'PYEOF'
+#!/usr/bin/env python3
+import configparser
+import os
+import re
+import subprocess
+import sys
+
+CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+MARKER = os.path.join(CONFIG_HOME, "rexel-taskbar-pinned")
+APPLETSRC = os.path.join(CONFIG_HOME, "plasma-org.kde.plasma.desktop-appletsrc")
+PINS = [
+    "applications:rexel-outlook.desktop",
+    "applications:rexel-teams.desktop",
+    "applications:rexel-onedrive.desktop",
+    "applications:rexel-word.desktop",
+    "applications:rexel-excel.desktop",
+    "applications:rexel-powerpoint.desktop",
+]
+
+if os.path.exists(MARKER):
+    sys.exit(0)
+
+if not os.path.exists(APPLETSRC):
+    # Plasma has not written its config yet; try again on the next login
+    sys.exit(1)
+
+cfg = configparser.ConfigParser(strict=False, interpolation=None)
+cfg.optionxform = str
+cfg.read(APPLETSRC)
+
+applet_re = re.compile(r"^Containments\]\[\d+\]\[Applets\]\[\d+\]$")
+changed = False
+
+for section in list(cfg.sections()):
+    if not applet_re.match(section):
+        continue
+    if cfg.get(section, "plugin", fallback="") != "org.kde.plasma.icontasks":
+        continue
+
+    conf = section + "][Configuration][General]"
+    if not cfg.has_section(conf):
+        cfg.add_section(conf)
+    current = [x for x in cfg.get(conf, "launchers", fallback="").split(",") if x]
+    for pin in PINS:
+        if pin not in current:
+            current.append(pin)
+    cfg.set(conf, "launchers", ",".join(current))
+    changed = True
+
+if changed:
+    with open(APPLETSRC, "w") as f:
+        cfg.write(f, space_around_delimiters=False)
+    # plasmashell rewrites its config on exit, so restart it to load the pins
+    subprocess.run(["plasmashell", "--replace"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+os.makedirs(CONFIG_HOME, exist_ok=True)
+open(MARKER, "w").close()
+PYEOF
+chmod 0755 /usr/libexec/rexel-pin-taskbar.py
+
+mkdir -p /etc/xdg/autostart
+cat > /etc/xdg/autostart/rexel-taskbar-pins.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Rexel taskbar pins
+Exec=/usr/libexec/rexel-pin-taskbar.py
+X-KDE-autostart-after=panel
+NoDisplay=true
+EOF
+
+
 
 
 ### ----------------------------------------------------------------------------
