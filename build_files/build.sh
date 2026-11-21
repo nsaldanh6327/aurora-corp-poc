@@ -104,6 +104,23 @@ done
 rm -f "$M365_POLICY"
 
 ### ----------------------------------------------------------------------------
+### GNOME defaults: dock favorites via dconf (applied at build time)
+### ----------------------------------------------------------------------------
+
+mkdir -p /etc/dconf/profile /etc/dconf/db/local.d
+cat > /etc/dconf/profile/user <<'EOF'
+user-db:user
+system-db:local
+EOF
+
+cat > /etc/dconf/db/local.d/00-favorites <<'EOF'
+[org/gnome/shell]
+favorite-apps=['google-chrome.desktop', 'microsoft-edge.desktop']
+EOF
+
+dconf update
+
+### ----------------------------------------------------------------------------
 ### ONLYOFFICE: Flatpak preinstall on first boot
 ### ----------------------------------------------------------------------------
 
@@ -125,3 +142,4 @@ EOF
 
 dnf5 clean all
 rm -rf /var/cache/* /var/log/dnf* /var/lib/dnf/repos /run/dnf 2>/dev/null || true
+
