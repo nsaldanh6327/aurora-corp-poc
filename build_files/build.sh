@@ -104,40 +104,31 @@ done
 rm -f "$M365_POLICY"
 
 ### ----------------------------------------------------------------------------
-### KDE taskbar defaults: icontasks (task manager) launchers
+### Edge web app launchers (fixed IDs so they can be pinned)
 ### ----------------------------------------------------------------------------
 
-TM_XML=/usr/share/plasma/plasmoids/org.kde.plasma.icontasks/contents/config/main.xml
-[ -f "$TM_XML" ] || { echo "ERROR: $TM_XML not found" >&2; exit 1; }
+EDGE_APPS=(
+  "outlook|Outlook|https://outlook.cloud.microsoft/mail/"
+  "teams|Teams|https://teams.microsoft.com/v2/"
+  "onedrive|OneDrive|https://onedrive.live.com/"
+  "word|Word|https://word.cloud.microsoft/"
+  "excel|Excel|https://excel.cloud.microsoft/"
+  "powerpoint|PowerPoint|https://powerpoint.cloud.microsoft/"
+)
 
-python3 - "$TM_XML" <<'PYEOF'
-import sys
-import xml.etree.ElementTree as ET
+for entry in "${EDGE_APPS[@]}"; do
+    IFS='|' read -r id name url <<< "$entry"
+    cat > "/usr/share/applications/rexel-${id}.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=${name}
+Exec=/usr/bin/microsoft-edge-stable --app=${url} --no-first-run
+Icon=/usr/share/rexel-icons/${id}.png
+Categories=Office;
+Terminal=false
+EOF
+done
 
-path = sys.argv[1]
-NS = "http://www.kde.org/standards/kcfg/1.0"
-ET.register_namespace("", NS)
-
-tree = ET.parse(path)
-root = tree.getroot()
-
-found = False
-for entry in root.iter("{%s}entry" % NS):
-    if entry.get("name") == "launchers":
-        default = entry.find("{%s}default" % NS)
-        if default is None:
-            default = ET.SubElement(entry, "{%s}default" % NS)
-        default.text = ",".join([
-            "applications:google-chrome.desktop",
-            "applications:microsoft-edge.desktop",
-        ])
-        found = True
-
-if not found:
-    sys.exit("ERROR: 'launchers' entry not found in " + path)
-
-tree.write(path, xml_declaration=True, encoding="UTF-8")
-PYEOF
 
 
 ### ----------------------------------------------------------------------------
