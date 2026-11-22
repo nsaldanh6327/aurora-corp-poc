@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Rexel VPN
+Comment=Connect to Rexel Corporate VPN via Keycloak SSO
+Exec=/usr/bin/rexel-vpn
+Icon=network-vpn
+Terminal=true
+Type=Application
+Categories=Network;VPN;
