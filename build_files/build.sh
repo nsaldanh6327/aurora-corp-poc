@@ -77,6 +77,39 @@ L /var/opt/microsoft - - - - /usr/lib/opt/microsoft
 EOF
 
 ### ----------------------------------------------------------------------------
+### Rexel VPN: openconnect + openconnect-sso (Chrome SAML + HostScan CA rehash)
+### ----------------------------------------------------------------------------
+
+retry dnf5 install -y --setopt=retries=10 \
+    openconnect \
+    python3-pip \
+    python3-lxml \
+    python3-requests \
+    python3-keyring \
+    python3-pysocks \
+    python3-colorama \
+    python3-prompt-toolkit \
+    python3-pyxdg
+
+pip install --prefix=/usr --no-cache-dir \
+    toml structlog attrs pyotp beautifulsoup4 signalrcore websockets aiohttp
+pip install --prefix=/usr --no-cache-dir --no-deps openconnect-sso
+
+# Patch openconnect-sso to use native Google Chrome instead of QtWebEngine
+for py_site in /usr/lib/python*/site-packages/openconnect_sso; do
+    if [ -d "$py_site" ]; then
+        install -m 0644 /usr/share/rexel-vpn/saml_authenticator.py "$py_site/saml_authenticator.py"
+    fi
+done
+chmod 0755 /usr/bin/rexel-vpn
+
+# Rehash /etc/ssl/certs so Cisco HostScan cstub trusts DigiCert Trusted Root G4
+csplit -s -z -f /etc/ssl/certs/ca- -b "%03d.pem" \
+    /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    '/-----BEGIN CERTIFICATE-----/' '{*}'
+openssl rehash /etc/ssl/certs
+
+### ----------------------------------------------------------------------------
 ### Managed policies: real files in /etc/opt (supported by bootc lint)
 ### ----------------------------------------------------------------------------
 
@@ -204,9 +237,6 @@ Exec=/usr/libexec/rexel-pin-taskbar.py
 X-KDE-autostart-after=panel
 NoDisplay=true
 EOF
-
-
-
 
 ### ----------------------------------------------------------------------------
 ### ONLYOFFICE: Flatpak preinstall on first boot
