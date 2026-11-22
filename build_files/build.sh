@@ -95,14 +95,24 @@ pip install --prefix=/usr --no-cache-dir \
     "setuptools<80" toml structlog attrs pyotp beautifulsoup4 signalrcore websockets aiohttp
 pip install --prefix=/usr --no-cache-dir --no-deps openconnect-sso
 
-
-# Patch openconnect-sso to use native Google Chrome instead of QtWebEngine
+# Patch openconnect-sso to use native Google Chrome and stub out unused PyQt6 browser module
 for py_site in /usr/lib/python*/site-packages/openconnect_sso; do
     if [ -d "$py_site" ]; then
         install -m 0644 /usr/share/rexel-vpn/saml_authenticator.py "$py_site/saml_authenticator.py"
+        cat > "$py_site/browser/__init__.py" <<'PYEOF'
+from ..config import DisplayMode
+
+class Terminated(Exception):
+    pass
+
+class Browser:
+    pass
+PYEOF
     fi
 done
 chmod 0755 /usr/bin/rexel-vpn
+
+
 
 # Rehash /etc/ssl/certs so Cisco HostScan cstub trusts DigiCert Trusted Root G4
 csplit -s -z -f /etc/ssl/certs/ca- -b "%03d.pem" \
