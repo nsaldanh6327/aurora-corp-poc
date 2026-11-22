@@ -92,8 +92,9 @@ retry dnf5 install -y --setopt=retries=10 \
     python3-pyxdg
 
 pip install --prefix=/usr --no-cache-dir \
-    toml structlog attrs pyotp beautifulsoup4 signalrcore websockets aiohttp
+    "setuptools<80" toml structlog attrs pyotp beautifulsoup4 signalrcore websockets aiohttp
 pip install --prefix=/usr --no-cache-dir --no-deps openconnect-sso
+
 
 # Patch openconnect-sso to use native Google Chrome instead of QtWebEngine
 for py_site in /usr/lib/python*/site-packages/openconnect_sso; do
