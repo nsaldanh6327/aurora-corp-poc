@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+exec /usr/local/bin/openconnect-sso \
+  --server ://rexelusa.com \
+  --ac-version 5.1.7.80 \
+  -- \
+  --csd-wrapper=/usr/libexec/openconnect/csd-wrapper.sh \
+  --os=linux-64
