@@ -14,7 +14,23 @@ if [ -L /opt ]; then
     mkdir /opt
 fi
 
+### Retry with increasing backoff (covers HTTP 429 from packages.microsoft.com)
+retry() {
+    local n=0
+    until "$@"; do
+        n=$((n+1))
+        if [ "$n" -ge 5 ]; then
+            echo "ERROR: failed after $n attempts: $*" >&2
+            return 1
+        fi
+        echo "Attempt $n failed, retrying in $((n*60))s..."
+        sleep $((n*60))
+    done
+}
+
+### ----------------------------------------------------------------------------
 ### Vendor repos (official RPMs, vendor-signed)
+### ----------------------------------------------------------------------------
 
 cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
 [google-chrome]
@@ -33,20 +49,6 @@ enabled=1
 gpgcheck=1
 gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 EOF
-
-# Retry with increasing backoff (covers HTTP 429 from packages.microsoft.com)
-retry() {
-    local n=0
-    until "$@"; do
-        n=$((n+1))
-        if [ "$n" -ge 5 ]; then
-            echo "ERROR: failed after $n attempts: $*" >&2
-            return 1
-        fi
-        echo "Attempt $n failed, retrying in $((n*60))s..."
-        sleep $((n*60))
-    done
-}
 
 retry dnf5 install -y --setopt=retries=10 google-chrome-stable
 retry dnf5 install -y --setopt=retries=10 microsoft-edge-stable
@@ -95,11 +97,20 @@ pip install --prefix=/usr --no-cache-dir \
     "setuptools<80" toml structlog attrs pyotp beautifulsoup4 signalrcore websockets aiohttp
 pip install --prefix=/usr --no-cache-dir --no-deps openconnect-sso
 
-# Patch openconnect-sso to use native Google Chrome and stub out unused PyQt6 browser module
-for py_site in /usr/lib/python*/site-packages/openconnect_sso; do
-    if [ -d "$py_site" ]; then
-        install -m 0644 /usr/share/rexel-vpn/saml_authenticator.py "$py_site/saml_authenticator.py"
-        cat > "$py_site/browser/__init__.py" <<'PYEOF'
+# Patch openconnect-sso: native Google Chrome, stubbed PyQt6 browser module,
+# and Python 3.14+ event loop fix in app.py
+PY_SITES=(/usr/lib/python*/site-packages/openconnect_sso)
+if [ ! -d "${PY_SITES[0]}" ]; then
+    echo "ERROR: openconnect_sso package not found" >&2
+    exit 1
+fi
+
+for py_site in "${PY_SITES[@]}"; do
+    [ -d "$py_site" ] || continue
+
+    install -m 0644 /usr/share/rexel-vpn/saml_authenticator.py "$py_site/saml_authenticator.py"
+
+    cat > "$py_site/browser/__init__.py" <<'PYEOF'
 from ..config import DisplayMode
 
 class Terminated(Exception):
@@ -108,14 +119,32 @@ class Terminated(Exception):
 class Browser:
     pass
 PYEOF
-    fi
+
+    # Python 3.14+: asyncio.get_event_loop() raises when no loop exists.
+    python3 - "$py_site/app.py" <<'PYEOF'
+import sys
+path = sys.argv[1]
+src = open(path).read()
+helper = '''import asyncio as _aio
+def _rexel_loop():
+    try:
+        return _aio.get_event_loop()
+    except RuntimeError:
+        loop = _aio.new_event_loop()
+        _aio.set_event_loop(loop)
+        return loop
+
+'''
+src = src.replace("asyncio.get_event_loop()", "_rexel_loop()")
+open(path, "w").write(helper + src)
+PYEOF
+    grep -q _rexel_loop "$py_site/app.py" || { echo "ERROR: app.py patch failed" >&2; exit 1; }
 done
+
 chmod 0755 /usr/bin/rexel-vpn
 
-
-
 # Rehash /etc/ssl/certs so Cisco HostScan cstub trusts DigiCert Trusted Root G4
-csplit -s -z -f /etc/ssl/certs/ca- -b "%03d.pem" \
+csplit -s -z -f /etc/ssl/certs/ca- -b "d.pem" \
     /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
     '/-----BEGIN CERTIFICATE-----/' '{*}'
 openssl rehash /etc/ssl/certs
@@ -271,3 +300,4 @@ EOF
 
 dnf5 clean all
 rm -rf /var/cache/* /var/log/dnf* /var/lib/dnf/repos /run/dnf 2>/dev/null || true
+
