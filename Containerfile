@@ -26,16 +26,16 @@ RUN dnf install -y \
       python3-requests \
       python3-keyring \
       python3-pysocks \
-      python3-toml \
       python3-colorama \
       python3-prompt-toolkit \
       python3-pyxdg && \
     pip install --prefix=/usr --no-cache-dir \
-      structlog attrs pyotp beautifulsoup4 signalrcore websockets aiohttp && \
+      toml structlog attrs pyotp beautifulsoup4 signalrcore websockets aiohttp && \
     pip install --prefix=/usr --no-cache-dir --no-deps openconnect-sso && \
     csplit -s -z -f /etc/ssl/certs/ca- -b "%03d.pem" /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem '/-----BEGIN CERTIFICATE-----/' '{*}' && \
     openssl rehash /etc/ssl/certs && \
     dnf clean all
+
 
 COPY system_files/usr/share/rexel-vpn/saml_authenticator.py /usr/share/rexel-vpn/saml_authenticator.py
 COPY system_files/usr/bin/rexel-vpn /usr/bin/rexel-vpn
