@@ -144,7 +144,7 @@ done
 chmod 0755 /usr/bin/rexel-vpn
 
 # Rehash /etc/ssl/certs so Cisco HostScan cstub trusts DigiCert Trusted Root G4
-csplit -s -z -f /etc/ssl/certs/ca- -b "d.pem" \
+csplit -s -z -f /etc/ssl/certs/ca- -b "%03d.pem" \
     /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
     '/-----BEGIN CERTIFICATE-----/' '{*}'
 openssl rehash /etc/ssl/certs
@@ -300,4 +300,3 @@ EOF
 
 dnf5 clean all
 rm -rf /var/cache/* /var/log/dnf* /var/lib/dnf/repos /run/dnf 2>/dev/null || true
-
