@@ -1,7 +1,7 @@
-
 import asyncio
 import json
 import shutil
+import socket
 import subprocess
 import tempfile
 import urllib.request
@@ -11,24 +11,32 @@ import structlog
 logger = structlog.get_logger()
 
 
+def _get_free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 async def authenticate_in_browser(proxy, auth_info, credentials, display_mode):
+    port = _get_free_port()
     user_data_dir = tempfile.mkdtemp(prefix="chrome-vpn-")
     cmd = [
         "google-chrome-stable",
-        "--remote-debugging-port=9222",
+        f"--remote-debugging-port={port}",
         f"--user-data-dir={user_data_dir}",
         "--no-first-run",
         "--no-default-browser-check",
+        "--new-window",
         auth_info.login_url,
     ]
-    logger.info("Launching Google Chrome for Keycloak SSO", url=auth_info.login_url)
+    logger.info("Launching Google Chrome for Keycloak SSO", url=auth_info.login_url, port=port)
     proc = subprocess.Popen(cmd)
 
     try:
         ws_url = None
-        for _ in range(30):
+        for _ in range(40):
             try:
-                with urllib.request.urlopen("http://127.0.0", timeout=1) as resp:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=1) as resp:
                     tabs = json.loads(resp.read().decode())
                     for tab in tabs:
                         if tab.get("type") == "page" and "webSocketDebuggerUrl" in tab:
@@ -40,7 +48,7 @@ async def authenticate_in_browser(proxy, auth_info, credentials, display_mode):
                 await asyncio.sleep(0.5)
 
         if not ws_url:
-            raise RuntimeError("Could not connect to Chrome remote debugging port 9222")
+            raise RuntimeError(f"Could not connect to Chrome remote debugging port {port}")
 
         async with websockets.connect(ws_url) as ws:
             await ws.send(json.dumps({"id": 1, "method": "Network.enable"}))
