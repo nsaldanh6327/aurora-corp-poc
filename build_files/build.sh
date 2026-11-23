@@ -50,7 +50,6 @@ gpgcheck=1
 gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 EOF
 
-# Fail fast if a vendor repo is unreachable
 for url in https://dl.google.com/linux/chrome/rpm/stable/x86_64 \
            https://packages.microsoft.com/yumrepos/edge; do
     curl -sfI "$url/repodata/repomd.xml" > /dev/null \
@@ -61,20 +60,22 @@ retry dnf5 install -y --setopt=retries=5 google-chrome-stable
 retry dnf5 install -y --setopt=retries=5 microsoft-edge-stable
 rpm -q google-chrome-stable microsoft-edge-stable
 
-# Remove vendor repos so browser updates come only from image rebuilds
 rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 
 ### ----------------------------------------------------------------------------
-### Cisco Secure Client (Core VPN + ISE Posture + DART)
-### RPMs are read from build_files/rpms in the repo
+### Cisco Secure Client (RPMs from /ctx/rpms, copied in by the Containerfile)
 ### ----------------------------------------------------------------------------
 
-dnf5 install -y /ctx/rpms/cisco-secure-client-vpn-5.1.20.333-1.x86_64.rpm
-dnf5 install -y \
-    /ctx/rpms/cisco-secure-client-iseposture-5.1.20.333-1.x86_64.rpm \
-    /ctx/rpms/cisco-secure-client-dart-5.1.20.333-1.x86_64.rpm
+shopt -s nullglob
+CISCO_RPMS=(/ctx/rpms/*.rpm)
+shopt -u nullglob
+if [ "${#CISCO_RPMS[@]}" -eq 0 ]; then
+    echo "ERROR: no Cisco RPMs found in /ctx/rpms" >&2
+    exit 1
+fi
 
-rpm -q cisco-secure-client-vpn cisco-secure-client-iseposture cisco-secure-client-dart
+dnf5 install -y "${CISCO_RPMS[@]}"
+rpm -qa | grep -i cisco
 systemctl enable vpnagentd.service
 
 ### ----------------------------------------------------------------------------
@@ -117,7 +118,6 @@ cat > "$M365_POLICY" <<'EOF'
 }
 EOF
 
-# Fail the build if the JSON is invalid
 python3 -m json.tool "$M365_POLICY" > /dev/null
 
 for dir in /etc/opt/edge/policies/managed /etc/opt/chrome/policies/managed; do
@@ -245,7 +245,7 @@ Branch=stable
 EOF
 
 ### ----------------------------------------------------------------------------
-### Cleanup: remove runtime and dnf state that lint flags
+### Cleanup
 ### ----------------------------------------------------------------------------
 
 dnf5 clean all
