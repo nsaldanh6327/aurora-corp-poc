@@ -135,6 +135,29 @@ mkdir -p /usr/lib/tmpfiles.d
 } > /usr/lib/tmpfiles.d/corp-browsers.conf
 
 ### ----------------------------------------------------------------------------
+### Cisco Secure Client trusted CA certificates
+### Must come after the /opt move section (creates /usr/lib/opt/.cisco)
+### ----------------------------------------------------------------------------
+
+DIGICERT_CS_CA_URL="https://cacerts.digicert.com/DigiCertTrustedG4CodeSigningRSA4096SHA3842021CA1.crt"
+DIGICERT_ROOT_G4_URL="https://cacerts.digicert.com/DigiCertTrustedRootG4.crt"
+
+CISCO_CA_DIR=/usr/lib/opt/.cisco/certificates/ca
+mkdir -p "$CISCO_CA_DIR" /etc/pki/ca-trust/source/anchors
+
+retry bash -c "curl -fsSL '$DIGICERT_CS_CA_URL' | openssl x509 -inform DER -out '$CISCO_CA_DIR/DigiCertTrustedG4CodeSigningRSA4096SHA3842021CA1.pem'"
+retry bash -c "curl -fsSL '$DIGICERT_ROOT_G4_URL' | openssl x509 -inform DER -out '$CISCO_CA_DIR/DigiCertTrustedRootG4.pem'"
+
+openssl rehash "$CISCO_CA_DIR"
+cp "$CISCO_CA_DIR"/*.pem /etc/pki/ca-trust/source/anchors/
+update-ca-trust extract
+
+# /var/opt/.cisco -> /usr/lib/opt/.cisco (dotfiles aren't covered by the glob above)
+printf 'L+ /var/opt/.cisco - - - - /usr/lib/opt/.cisco\n' > /usr/lib/tmpfiles.d/cisco-secureclient.conf
+
+restorecon -RF /usr/lib/opt/.cisco /usr/lib/tmpfiles.d/cisco-secureclient.conf 2>/dev/null || true
+
+### ----------------------------------------------------------------------------
 ### Managed policies: real files in /etc/opt (supported by bootc lint)
 ### ----------------------------------------------------------------------------
 
