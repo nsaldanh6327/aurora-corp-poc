@@ -305,6 +305,22 @@ Branch=stable
 EOF
 
 ### ----------------------------------------------------------------------------
+### Additional tools (Fedora repos)
+### locate is provided by mlocate on Fedora
+### ----------------------------------------------------------------------------
+
+retry dnf5 install -y --setopt=retries=5 \
+    remmina \
+    notepadqq \
+    filezilla \
+    meld \
+    rclone \
+    hardinfo \
+    net-tools \
+    mlocate
+rpm -q remmina notepadqq filezilla meld rclone hardinfo net-tools mlocate
+
+### ----------------------------------------------------------------------------
 ### Cleanup
 ### ----------------------------------------------------------------------------
 
