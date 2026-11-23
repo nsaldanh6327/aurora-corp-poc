@@ -65,16 +65,19 @@ rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 ### ----------------------------------------------------------------------------
 ### Cisco Secure Client (RPMs from /ctx/rpms, copied in by the Containerfile)
 ### Posture RPM is downloaded from the GitHub release (too big for rpms/)
+### Asset is found via the public release page (the API returns 403 on shared runners)
 ### vpn-cli is excluded: it conflicts with the core vpn package
 ### vpn must install first: iseposture's pre-install check requires it
 ### ----------------------------------------------------------------------------
 
-POSTURE_RELEASE_API="https://api.github.com/repos/nsaldanh6327/aurora-corp-poc/releases/tags/posture-5.1.20.333"
-POSTURE_URL="$(retry curl -fsSL "$POSTURE_RELEASE_API" \
-    | grep -o '"browser_download_url": *"[^"]*\.rpm"' \
-    | sed -E 's/.*"(https[^"]*)"/\1/' \
+POSTURE_REPO="https://github.com/nsaldanh6327/aurora-corp-poc"
+POSTURE_TAG="posture-5.1.20.333"
+POSTURE_PATH="$(curl -fsSL --retry 3 --retry-delay 30 "$POSTURE_REPO/releases/expanded_assets/$POSTURE_TAG" \
+    | grep -o "href=\"/nsaldanh6327/aurora-corp-poc/releases/download/$POSTURE_TAG/[^\"]*\.rpm\"" \
+    | sed -E 's/^href="//; s/"$//' \
     | head -1)"
-[ -n "$POSTURE_URL" ] || { echo "ERROR: no .rpm asset found in posture release" >&2; exit 1; }
+[ -n "$POSTURE_PATH" ] || { echo "ERROR: no .rpm asset found in release $POSTURE_TAG" >&2; exit 1; }
+POSTURE_URL="https://github.com$POSTURE_PATH"
 echo "Posture RPM: $POSTURE_URL"
 
 POSTURE_DIR=/tmp/posture
