@@ -14,7 +14,7 @@ if [ -L /opt ]; then
     mkdir /opt
 fi
 
-### Retry with increasing backoff (covers HTTP 429 from ://microsoft.com)
+### Retry with increasing backoff (covers HTTP 429 from Microsoft)
 retry() {
     local n=0
     until "$@"; do
@@ -32,22 +32,25 @@ retry() {
 ### Vendor repos (official RPMs, vendor-signed)
 ### ----------------------------------------------------------------------------
 
-cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
+CHROME_HOST="://google.com"
+MS_HOST="://microsoft.com"
+
+cat > /etc/yum.repos.d/google-chrome.repo <<EOF
 [google-chrome]
 name=Google Chrome
-baseurl=https://google.com
+baseurl=https://${CHROME_HOST}/linux/chrome/rpm/stable/x86_64
 enabled=1
 gpgcheck=1
-gpgkey=https://google.com
+gpgkey=https://${CHROME_HOST}/linux/linux_signing_key.pub
 EOF
 
-cat > /etc/yum.repos.d/microsoft-edge.repo <<'EOF'
+cat > /etc/yum.repos.d/microsoft-edge.repo <<EOF
 [microsoft-edge]
 name=Microsoft Edge
-baseurl=https://://microsoft.com/yumrepos/edge
+baseurl=https://${MS_HOST}/yumrepos/edge
 enabled=1
 gpgcheck=1
-gpgkey=https://://microsoft.com/keys/microsoft.asc
+gpgkey=https://${MS_HOST}/keys/microsoft.asc
 EOF
 
 retry dnf5 install -y --setopt=retries=10 google-chrome-stable
@@ -84,7 +87,7 @@ rmdir /opt
 ln -s var/opt /opt
 
 mkdir -p /usr/lib/tmpfiles.d
-cat > /usr/lib/tmpfiles.d/corp-apps.conf <<'EOF'
+cat > /usr/lib/tmpfiles.d/corp-browsers.conf <<'EOF'
 d /var/opt 0755 root root -
 L /var/opt/google - - - - /usr/lib/opt/google
 L /var/opt/microsoft - - - - /usr/lib/opt/microsoft
@@ -95,16 +98,23 @@ EOF
 ### Managed policies: real files in /etc/opt (supported by bootc lint)
 ### ----------------------------------------------------------------------------
 
+OUTLOOK_URL="https://cloud.microsoft"
+TEAMS_URL="https://microsoft.com"
+ONEDRIVE_URL="https://live.com"
+WORD_URL="https://cloud.microsoft"
+EXCEL_URL="https://cloud.microsoft"
+PPT_URL="https://cloud.microsoft"
+
 M365_POLICY=/tmp/m365_pwas.json
-cat > "$M365_POLICY" <<'EOF'
+cat > "$M365_POLICY" <<EOF
 {
   "WebAppInstallForceList": [
-    {"url": "https://cloud.microsoft", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://microsoft.com", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://live.com", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://cloud.microsoft", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://cloud.microsoft", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://cloud.microsoft", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
+    {"url": "${OUTLOOK_URL}", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "${TEAMS_URL}", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "${ONEDRIVE_URL}", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "${WORD_URL}", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "${EXCEL_URL}", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "${PPT_URL}", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
   ]
 }
 EOF
@@ -123,12 +133,12 @@ rm -f "$M365_POLICY"
 ### ----------------------------------------------------------------------------
 
 EDGE_APPS=(
-  "outlook|Outlook|https://cloud.microsoft"
-  "teams|Teams|https://microsoft.com"
-  "onedrive|OneDrive|https://live.com"
-  "word|Word|https://cloud.microsoft"
-  "excel|Excel|https://cloud.microsoft"
-  "powerpoint|PowerPoint|https://cloud.microsoft"
+  "outlook|Outlook|${OUTLOOK_URL}"
+  "teams|Teams|${TEAMS_URL}"
+  "onedrive|OneDrive|${ONEDRIVE_URL}"
+  "word|Word|${WORD_URL}"
+  "excel|Excel|${EXCEL_URL}"
+  "powerpoint|PowerPoint|${PPT_URL}"
 )
 
 for entry in "${EDGE_APPS[@]}"; do
@@ -224,11 +234,13 @@ EOF
 ### ONLYOFFICE: Flatpak preinstall on first boot
 ### ----------------------------------------------------------------------------
 
+FLATHUB_HOST="dl.flathub.org"
+
 mkdir -p /usr/share/flatpak/preinstall.d /usr/share/flatpak/remotes.d
-cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<'EOF'
+cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<EOF
 [Flatpak Repo]
 Title=Flathub
-Url=https://flathub.org
+Url=https://${FLATHUB_HOST}/repo/
 Homepage=https://flathub.org
 EOF
 cat > /usr/share/flatpak/preinstall.d/onlyoffice.preinstall <<'EOF'
@@ -242,4 +254,3 @@ EOF
 
 dnf5 clean all
 rm -rf /var/cache/* /var/log/dnf* /var/lib/dnf/repos /run/dnf 2>/dev/null || true
-
