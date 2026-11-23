@@ -64,12 +64,19 @@ rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 
 ### ----------------------------------------------------------------------------
 ### Cisco Secure Client (RPMs from /ctx/rpms, copied in by the Containerfile)
-### Posture RPM is downloaded from the overlay's GitHub release (too big for rpms/)
+### Posture RPM is downloaded from the GitHub release (too big for rpms/)
 ### vpn-cli is excluded: it conflicts with the core vpn package
 ### vpn must install first: iseposture's pre-install check requires it
 ### ----------------------------------------------------------------------------
 
-POSTURE_URL="https://github.com/<org>/<overlay-repo>/releases/download/posture-5.1.20.333/<posture-file>.rpm"
+POSTURE_RELEASE_API="https://api.github.com/repos/nsaldanh6327/aurora-corp-poc/releases/tags/posture-5.1.20.333"
+POSTURE_URL="$(retry curl -fsSL "$POSTURE_RELEASE_API" \
+    | grep -o '"browser_download_url": *"[^"]*\.rpm"' \
+    | sed -E 's/.*"(https[^"]*)"/\1/' \
+    | head -1)"
+[ -n "$POSTURE_URL" ] || { echo "ERROR: no .rpm asset found in posture release" >&2; exit 1; }
+echo "Posture RPM: $POSTURE_URL"
+
 POSTURE_DIR=/tmp/posture
 mkdir -p "$POSTURE_DIR"
 retry curl -fL --retry 3 -o "$POSTURE_DIR/cisco-secure-client-posture.rpm" "$POSTURE_URL"
