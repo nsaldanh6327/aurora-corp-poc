@@ -3,7 +3,7 @@ COPY build_files /
 COPY system_files /system_files
 COPY rpms /rpms
 
-FROM ghcr.io/ublue-os/aurora:stable
+FROM ghcr.io/ublue-os/aurora-dx:stable
 
 RUN mkdir -p /etc/opt/edge/policies/managed
 COPY m365_pwas.json /etc/opt/edge/policies/managed/m365_pwas.json
