@@ -6,7 +6,7 @@ cp -avf /ctx/system_files/. /
 
 ### ----------------------------------------------------------------------------
 ### /opt is a symlink to /var/opt on ostree. Use a real /opt for the RPM
-### install, then move the files into the image and restore the link.
+### installs, then move the files into the image and restore the link.
 ### ----------------------------------------------------------------------------
 
 if [ -L /opt ]; then
@@ -14,17 +14,17 @@ if [ -L /opt ]; then
     mkdir /opt
 fi
 
-### Retry with increasing backoff (covers HTTP 429 from Microsoft)
+### Retry for transient network and HTTP 429 errors
 retry() {
     local n=0
     until "$@"; do
         n=$((n+1))
-        if [ "$n" -ge 5 ]; then
+        if [ "$n" -ge 3 ]; then
             echo "ERROR: failed after $n attempts: $*" >&2
             return 1
         fi
-        echo "Attempt $n failed, retrying in $((n*60))s..."
-        sleep $((n*60))
+        echo "Attempt $n failed, retrying in $((n*30))s..."
+        sleep $((n*30))
     done
 }
 
@@ -32,29 +32,33 @@ retry() {
 ### Vendor repos (official RPMs, vendor-signed)
 ### ----------------------------------------------------------------------------
 
-CHROME_HOST="://google.com"
-MS_HOST="://microsoft.com"
-
-cat > /etc/yum.repos.d/google-chrome.repo <<EOF
+cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
 [google-chrome]
 name=Google Chrome
-baseurl=https://${CHROME_HOST}/linux/chrome/rpm/stable/x86_64
+baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
 enabled=1
 gpgcheck=1
-gpgkey=https://${CHROME_HOST}/linux/linux_signing_key.pub
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
 EOF
 
-cat > /etc/yum.repos.d/microsoft-edge.repo <<EOF
+cat > /etc/yum.repos.d/microsoft-edge.repo <<'EOF'
 [microsoft-edge]
 name=Microsoft Edge
-baseurl=https://${MS_HOST}/yumrepos/edge
+baseurl=https://packages.microsoft.com/yumrepos/edge
 enabled=1
 gpgcheck=1
-gpgkey=https://${MS_HOST}/keys/microsoft.asc
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 EOF
 
-retry dnf5 install -y --setopt=retries=10 google-chrome-stable
-retry dnf5 install -y --setopt=retries=10 microsoft-edge-stable
+# Fail fast if a vendor repo is unreachable
+for url in https://dl.google.com/linux/chrome/rpm/stable/x86_64 \
+           https://packages.microsoft.com/yumrepos/edge; do
+    curl -sfI "$url/repodata/repomd.xml" > /dev/null \
+        || { echo "ERROR: cannot reach $url/repodata/repomd.xml" >&2; exit 1; }
+done
+
+retry dnf5 install -y --setopt=retries=5 google-chrome-stable
+retry dnf5 install -y --setopt=retries=5 microsoft-edge-stable
 rpm -q google-chrome-stable microsoft-edge-stable
 
 # Remove vendor repos so browser updates come only from image rebuilds
@@ -62,6 +66,7 @@ rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 
 ### ----------------------------------------------------------------------------
 ### Cisco Secure Client (Core VPN + ISE Posture + DART)
+### RPMs are read from build_files/rpms in the repo
 ### ----------------------------------------------------------------------------
 
 dnf5 install -y /ctx/rpms/cisco-secure-client-vpn-5.1.20.333-1.x86_64.rpm
@@ -98,23 +103,16 @@ EOF
 ### Managed policies: real files in /etc/opt (supported by bootc lint)
 ### ----------------------------------------------------------------------------
 
-OUTLOOK_URL="https://cloud.microsoft"
-TEAMS_URL="https://microsoft.com"
-ONEDRIVE_URL="https://live.com"
-WORD_URL="https://cloud.microsoft"
-EXCEL_URL="https://cloud.microsoft"
-PPT_URL="https://cloud.microsoft"
-
 M365_POLICY=/tmp/m365_pwas.json
-cat > "$M365_POLICY" <<EOF
+cat > "$M365_POLICY" <<'EOF'
 {
   "WebAppInstallForceList": [
-    {"url": "${OUTLOOK_URL}", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "${TEAMS_URL}", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "${ONEDRIVE_URL}", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "${WORD_URL}", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "${EXCEL_URL}", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "${PPT_URL}", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
+    {"url": "https://outlook.cloud.microsoft/mail/", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://teams.microsoft.com/v2/", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://onedrive.live.com/", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://word.cloud.microsoft/", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://excel.cloud.microsoft/", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://powerpoint.cloud.microsoft/", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
   ]
 }
 EOF
@@ -133,12 +131,12 @@ rm -f "$M365_POLICY"
 ### ----------------------------------------------------------------------------
 
 EDGE_APPS=(
-  "outlook|Outlook|${OUTLOOK_URL}"
-  "teams|Teams|${TEAMS_URL}"
-  "onedrive|OneDrive|${ONEDRIVE_URL}"
-  "word|Word|${WORD_URL}"
-  "excel|Excel|${EXCEL_URL}"
-  "powerpoint|PowerPoint|${PPT_URL}"
+  "outlook|Outlook|https://outlook.cloud.microsoft/mail/"
+  "teams|Teams|https://teams.microsoft.com/v2/"
+  "onedrive|OneDrive|https://onedrive.live.com/"
+  "word|Word|https://word.cloud.microsoft/"
+  "excel|Excel|https://excel.cloud.microsoft/"
+  "powerpoint|PowerPoint|https://powerpoint.cloud.microsoft/"
 )
 
 for entry in "${EDGE_APPS[@]}"; do
@@ -234,14 +232,12 @@ EOF
 ### ONLYOFFICE: Flatpak preinstall on first boot
 ### ----------------------------------------------------------------------------
 
-FLATHUB_HOST="dl.flathub.org"
-
 mkdir -p /usr/share/flatpak/preinstall.d /usr/share/flatpak/remotes.d
-cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<EOF
+cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<'EOF'
 [Flatpak Repo]
 Title=Flathub
-Url=https://${FLATHUB_HOST}/repo/
-Homepage=https://flathub.org
+Url=https://dl.flathub.org/repo/
+Homepage=https://flathub.org/
 EOF
 cat > /usr/share/flatpak/preinstall.d/onlyoffice.preinstall <<'EOF'
 [Flatpak Preinstall org.onlyoffice.desktopeditors]
