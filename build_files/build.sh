@@ -311,13 +311,10 @@ EOF
 
 retry dnf5 install -y --setopt=retries=5 \
     remmina \
-    notepadqq \
     filezilla \
     meld \
-    rclone \
-    hardinfo \
-    net-tools \
-    mlocate
+    hardinfo2 \
+    plocate
 rpm -q remmina notepadqq filezilla meld rclone hardinfo net-tools mlocate
 
 ### ----------------------------------------------------------------------------
