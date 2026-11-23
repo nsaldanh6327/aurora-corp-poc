@@ -64,14 +64,20 @@ rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 
 ### ----------------------------------------------------------------------------
 ### Cisco Secure Client (RPMs from /ctx/rpms, copied in by the Containerfile)
+### Posture RPM is downloaded from the overlay's GitHub release (too big for rpms/)
 ### vpn-cli is excluded: it conflicts with the core vpn package
 ### vpn must install first: iseposture's pre-install check requires it
 ### ----------------------------------------------------------------------------
 
+POSTURE_URL="https://github.com/<org>/<overlay-repo>/releases/download/posture-5.1.20.333/<posture-file>.rpm"
+POSTURE_DIR=/tmp/posture
+mkdir -p "$POSTURE_DIR"
+retry curl -fL --retry 3 -o "$POSTURE_DIR/cisco-secure-client-posture.rpm" "$POSTURE_URL"
+
 shopt -s nullglob
 VPN_RPMS=()
 OTHER_RPMS=()
-for rpm in /ctx/rpms/*.rpm; do
+for rpm in /ctx/rpms/*.rpm "$POSTURE_DIR"/*.rpm; do
     name="$(basename "$rpm")"
     case "$name" in
         cisco-secure-client-vpn-cli-*) echo "Skipping $name (conflicts with vpn)" ;;
@@ -90,6 +96,7 @@ dnf5 install -y "${VPN_RPMS[@]}"
 if [ "${#OTHER_RPMS[@]}" -gt 0 ]; then
     dnf5 install -y "${OTHER_RPMS[@]}"
 fi
+rm -rf "$POSTURE_DIR"
 
 rpm -qa | grep -i cisco
 systemctl enable vpnagentd.service
@@ -119,8 +126,6 @@ mkdir -p /usr/lib/tmpfiles.d
         echo "L /var/opt/$(basename "$item") - - - - /usr/lib/opt/$(basename "$item")"
     done
 } > /usr/lib/tmpfiles.d/corp-browsers.conf
-
-
 
 ### ----------------------------------------------------------------------------
 ### Managed policies: real files in /etc/opt (supported by bootc lint)
