@@ -94,28 +94,33 @@ fi
 rpm -qa | grep -i cisco
 systemctl enable vpnagentd.service
 
+### ----------------------------------------------------------------------------
+### Move everything under /opt into the image and restore /opt -> /var/opt
+### ----------------------------------------------------------------------------
 
-### ----------------------------------------------------------------------------
-### Move /opt vendor directories into the image and restore /opt -> /var/opt
-### ----------------------------------------------------------------------------
+echo "Contents of /opt before move:"
+ls -la /opt
 
 mkdir -p /usr/lib/opt
-for d in google microsoft cisco; do
-    if [ -d "/opt/$d" ]; then
-        mv "/opt/$d" "/usr/lib/opt/$d"
-    fi
+shopt -s dotglob nullglob
+for item in /opt/*; do
+    mv "$item" /usr/lib/opt/
 done
+shopt -u dotglob nullglob
 
 rmdir /opt
 ln -s var/opt /opt
 
 mkdir -p /usr/lib/tmpfiles.d
-cat > /usr/lib/tmpfiles.d/corp-browsers.conf <<'EOF'
-d /var/opt 0755 root root -
-L /var/opt/google - - - - /usr/lib/opt/google
-L /var/opt/microsoft - - - - /usr/lib/opt/microsoft
-L /var/opt/cisco - - - - /usr/lib/opt/cisco
-EOF
+{
+    echo "d /var/opt 0755 root root -"
+    for item in /usr/lib/opt/*; do
+        [ -e "$item" ] || continue
+        echo "L /var/opt/$(basename "$item") - - - - /usr/lib/opt/$(basename "$item")"
+    done
+} > /usr/lib/tmpfiles.d/corp-browsers.conf
+
+
 
 ### ----------------------------------------------------------------------------
 ### Managed policies: real files in /etc/opt (supported by bootc lint)
