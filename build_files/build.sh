@@ -14,7 +14,7 @@ if [ -L /opt ]; then
     mkdir /opt
 fi
 
-### Retry with increasing backoff (covers HTTP 429 from packages.microsoft.com)
+### Retry with increasing backoff (covers HTTP 429 from ://microsoft.com)
 retry() {
     local n=0
     until "$@"; do
@@ -35,19 +35,19 @@ retry() {
 cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
 [google-chrome]
 name=Google Chrome
-baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
+baseurl=https://google.com
 enabled=1
 gpgcheck=1
-gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+gpgkey=https://google.com
 EOF
 
 cat > /etc/yum.repos.d/microsoft-edge.repo <<'EOF'
 [microsoft-edge]
 name=Microsoft Edge
-baseurl=https://packages.microsoft.com/yumrepos/edge
+baseurl=https://://microsoft.com/yumrepos/edge
 enabled=1
 gpgcheck=1
-gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+gpgkey=https://://microsoft.com/keys/microsoft.asc
 EOF
 
 retry dnf5 install -y --setopt=retries=10 google-chrome-stable
@@ -58,11 +58,23 @@ rpm -q google-chrome-stable microsoft-edge-stable
 rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 
 ### ----------------------------------------------------------------------------
-### Move browser files into the image and restore /opt -> /var/opt
+### Cisco Secure Client (Core VPN + ISE Posture + DART)
+### ----------------------------------------------------------------------------
+
+dnf5 install -y /ctx/rpms/cisco-secure-client-vpn-5.1.20.333-1.x86_64.rpm
+dnf5 install -y \
+    /ctx/rpms/cisco-secure-client-iseposture-5.1.20.333-1.x86_64.rpm \
+    /ctx/rpms/cisco-secure-client-dart-5.1.20.333-1.x86_64.rpm
+
+rpm -q cisco-secure-client-vpn cisco-secure-client-iseposture cisco-secure-client-dart
+systemctl enable vpnagentd.service
+
+### ----------------------------------------------------------------------------
+### Move /opt vendor directories into the image and restore /opt -> /var/opt
 ### ----------------------------------------------------------------------------
 
 mkdir -p /usr/lib/opt
-for d in google microsoft; do
+for d in google microsoft cisco; do
     if [ -d "/opt/$d" ]; then
         mv "/opt/$d" "/usr/lib/opt/$d"
     fi
@@ -72,10 +84,11 @@ rmdir /opt
 ln -s var/opt /opt
 
 mkdir -p /usr/lib/tmpfiles.d
-cat > /usr/lib/tmpfiles.d/corp-browsers.conf <<'EOF'
+cat > /usr/lib/tmpfiles.d/corp-apps.conf <<'EOF'
 d /var/opt 0755 root root -
 L /var/opt/google - - - - /usr/lib/opt/google
 L /var/opt/microsoft - - - - /usr/lib/opt/microsoft
+L /var/opt/cisco - - - - /usr/lib/opt/cisco
 EOF
 
 ### ----------------------------------------------------------------------------
@@ -86,12 +99,12 @@ M365_POLICY=/tmp/m365_pwas.json
 cat > "$M365_POLICY" <<'EOF'
 {
   "WebAppInstallForceList": [
-    {"url": "https://outlook.cloud.microsoft/mail/", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://teams.microsoft.com/v2/", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://onedrive.live.com/", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://word.cloud.microsoft/", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://excel.cloud.microsoft/", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://powerpoint.cloud.microsoft/", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
+    {"url": "https://cloud.microsoft", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://microsoft.com", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://live.com", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://cloud.microsoft", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://cloud.microsoft", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
+    {"url": "https://cloud.microsoft", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
   ]
 }
 EOF
@@ -110,12 +123,12 @@ rm -f "$M365_POLICY"
 ### ----------------------------------------------------------------------------
 
 EDGE_APPS=(
-  "outlook|Outlook|https://outlook.cloud.microsoft/mail/"
-  "teams|Teams|https://teams.microsoft.com/v2/"
-  "onedrive|OneDrive|https://onedrive.live.com/"
-  "word|Word|https://word.cloud.microsoft/"
-  "excel|Excel|https://excel.cloud.microsoft/"
-  "powerpoint|PowerPoint|https://powerpoint.cloud.microsoft/"
+  "outlook|Outlook|https://cloud.microsoft"
+  "teams|Teams|https://microsoft.com"
+  "onedrive|OneDrive|https://live.com"
+  "word|Word|https://cloud.microsoft"
+  "excel|Excel|https://cloud.microsoft"
+  "powerpoint|PowerPoint|https://cloud.microsoft"
 )
 
 for entry in "${EDGE_APPS[@]}"; do
@@ -215,8 +228,8 @@ mkdir -p /usr/share/flatpak/preinstall.d /usr/share/flatpak/remotes.d
 cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<'EOF'
 [Flatpak Repo]
 Title=Flathub
-Url=https://dl.flathub.org/repo/
-Homepage=https://flathub.org/
+Url=https://flathub.org
+Homepage=https://flathub.org
 EOF
 cat > /usr/share/flatpak/preinstall.d/onlyoffice.preinstall <<'EOF'
 [Flatpak Preinstall org.onlyoffice.desktopeditors]
@@ -229,3 +242,4 @@ EOF
 
 dnf5 clean all
 rm -rf /var/cache/* /var/log/dnf* /var/lib/dnf/repos /run/dnf 2>/dev/null || true
+
