@@ -64,11 +64,19 @@ rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 
 ### ----------------------------------------------------------------------------
 ### Cisco Secure Client (RPMs from /ctx/rpms, copied in by the Containerfile)
+### vpn-cli is excluded: it conflicts with the core vpn package
 ### ----------------------------------------------------------------------------
 
 shopt -s nullglob
-CISCO_RPMS=(/ctx/rpms/*.rpm)
+CISCO_RPMS=()
+for rpm in /ctx/rpms/*.rpm; do
+    case "$(basename "$rpm")" in
+        cisco-secure-client-vpn-cli-*) echo "Skipping $(basename "$rpm") (conflicts with vpn)" ;;
+        *) CISCO_RPMS+=("$rpm") ;;
+    esac
+done
 shopt -u nullglob
+
 if [ "${#CISCO_RPMS[@]}" -eq 0 ]; then
     echo "ERROR: no Cisco RPMs found in /ctx/rpms" >&2
     exit 1
