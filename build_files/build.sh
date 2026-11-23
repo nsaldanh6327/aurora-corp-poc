@@ -65,26 +65,35 @@ rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
 ### ----------------------------------------------------------------------------
 ### Cisco Secure Client (RPMs from /ctx/rpms, copied in by the Containerfile)
 ### vpn-cli is excluded: it conflicts with the core vpn package
+### vpn must install first: iseposture's pre-install check requires it
 ### ----------------------------------------------------------------------------
 
 shopt -s nullglob
-CISCO_RPMS=()
+VPN_RPMS=()
+OTHER_RPMS=()
 for rpm in /ctx/rpms/*.rpm; do
-    case "$(basename "$rpm")" in
-        cisco-secure-client-vpn-cli-*) echo "Skipping $(basename "$rpm") (conflicts with vpn)" ;;
-        *) CISCO_RPMS+=("$rpm") ;;
+    name="$(basename "$rpm")"
+    case "$name" in
+        cisco-secure-client-vpn-cli-*) echo "Skipping $name (conflicts with vpn)" ;;
+        cisco-secure-client-vpn-[0-9]*) VPN_RPMS+=("$rpm") ;;
+        cisco-secure-client-*) OTHER_RPMS+=("$rpm") ;;
     esac
 done
 shopt -u nullglob
 
-if [ "${#CISCO_RPMS[@]}" -eq 0 ]; then
-    echo "ERROR: no Cisco RPMs found in /ctx/rpms" >&2
+if [ "${#VPN_RPMS[@]}" -ne 1 ]; then
+    echo "ERROR: expected exactly one cisco-secure-client-vpn RPM, found ${#VPN_RPMS[@]}" >&2
     exit 1
 fi
 
-dnf5 install -y "${CISCO_RPMS[@]}"
+dnf5 install -y "${VPN_RPMS[@]}"
+if [ "${#OTHER_RPMS[@]}" -gt 0 ]; then
+    dnf5 install -y "${OTHER_RPMS[@]}"
+fi
+
 rpm -qa | grep -i cisco
 systemctl enable vpnagentd.service
+
 
 ### ----------------------------------------------------------------------------
 ### Move /opt vendor directories into the image and restore /opt -> /var/opt
