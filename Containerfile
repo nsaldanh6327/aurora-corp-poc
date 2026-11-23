@@ -1,6 +1,7 @@
 FROM scratch AS ctx
 COPY build_files /
 COPY system_files /system_files
+COPY rpms /rpms
 
 FROM ghcr.io/ublue-os/aurora:stable
 
@@ -18,11 +19,6 @@ RUN chmod 0755 /usr/libexec/rexel-set-icons.sh && \
     mkdir -p /usr/lib/systemd/user/default.target.wants && \
     ln -sf ../rexel-icons.service /usr/lib/systemd/user/default.target.wants/rexel-icons.service
 
-COPY system_files/usr/share/rexel-vpn/saml_authenticator.py /usr/share/rexel-vpn/saml_authenticator.py
-COPY system_files/usr/bin/rexel-vpn /usr/bin/rexel-vpn
-COPY system_files/usr/share/applications/rexel-vpn.desktop /usr/share/applications/rexel-vpn.desktop
-RUN chmod 0755 /usr/bin/rexel-vpn
-
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
@@ -30,3 +26,4 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/build.sh
 
 RUN bootc container lint
+
