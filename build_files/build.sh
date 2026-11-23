@@ -315,7 +315,7 @@ retry dnf5 install -y --setopt=retries=5 \
     meld \
     hardinfo2 \
     plocate
-rpm -q remmina notepadqq filezilla meld rclone hardinfo net-tools mlocate
+rpm -q remmina filezilla meld rclone hardinfo2 plocate
 
 ### ----------------------------------------------------------------------------
 ### Cleanup
