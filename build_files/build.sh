@@ -29,40 +29,6 @@ retry() {
 }
 
 ### ----------------------------------------------------------------------------
-### Vendor repos (official RPMs, vendor-signed)
-### ----------------------------------------------------------------------------
-
-cat > /etc/yum.repos.d/google-chrome.repo <<'EOF'
-[google-chrome]
-name=Google Chrome
-baseurl=https://dl.google.com/linux/chrome/rpm/stable/x86_64
-enabled=1
-gpgcheck=1
-gpgkey=https://dl.google.com/linux/linux_signing_key.pub
-EOF
-
-cat > /etc/yum.repos.d/microsoft-edge.repo <<'EOF'
-[microsoft-edge]
-name=Microsoft Edge
-baseurl=https://packages.microsoft.com/yumrepos/edge
-enabled=1
-gpgcheck=1
-gpgkey=https://packages.microsoft.com/keys/microsoft.asc
-EOF
-
-for url in https://dl.google.com/linux/chrome/rpm/stable/x86_64 \
-           https://packages.microsoft.com/yumrepos/edge; do
-    curl -sfI "$url/repodata/repomd.xml" > /dev/null \
-        || { echo "ERROR: cannot reach $url/repodata/repomd.xml" >&2; exit 1; }
-done
-
-retry dnf5 install -y --setopt=retries=5 google-chrome-stable
-retry dnf5 install -y --setopt=retries=5 microsoft-edge-stable
-rpm -q google-chrome-stable microsoft-edge-stable
-
-rm -f /etc/yum.repos.d/google-chrome.repo /etc/yum.repos.d/microsoft-edge.repo
-
-### ----------------------------------------------------------------------------
 ### Cisco Secure Client (RPMs from /ctx/rpms, copied in by the Containerfile)
 ### Posture RPM is downloaded from the GitHub release (too big for rpms/)
 ### Asset is found via the public release page (the API returns 403 on shared runners)
@@ -161,36 +127,67 @@ printf 'L+ /var/opt/.cisco - - - - /usr/lib/opt/.cisco\n' > /usr/lib/tmpfiles.d/
 restorecon -RF /usr/lib/opt/.cisco /usr/lib/tmpfiles.d/cisco-secureclient.conf 2>/dev/null || true
 
 ### ----------------------------------------------------------------------------
-### Managed policies: real files in /etc/opt (supported by bootc lint)
+### Chrome (Flatpak, installed on first boot via preinstall; no vendor RPMs)
+### ----------------------------------------------------------------------------
+
+mkdir -p /usr/share/flatpak/remotes.d /usr/share/flatpak/preinstall.d
+cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<'EOF'
+[Flatpak Repo]
+Title=Flathub
+Url=https://dl.flathub.org/repo/
+Homepage=https://flathub.org/
+EOF
+
+cat > /usr/share/flatpak/preinstall.d/chrome.preinstall <<'EOF'
+[Flatpak Preinstall com.google.Chrome]
+Branch=stable
+EOF
+
+cat > /usr/share/flatpak/preinstall.d/onlyoffice.preinstall <<'EOF'
+[Flatpak Preinstall org.onlyoffice.desktopeditors]
+Branch=stable
+EOF
+
+### ----------------------------------------------------------------------------
+### Chrome managed policies: M365 PWAs force-installed
+### Host policy dir is exposed read-only to the Flatpak via an override
 ### ----------------------------------------------------------------------------
 
 M365_POLICY=/tmp/m365_pwas.json
 cat > "$M365_POLICY" <<'EOF'
 {
   "WebAppInstallForceList": [
-    {"url": "https://outlook.cloud.microsoft/mail/", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://teams.microsoft.com/v2/", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://onedrive.live.com/", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://word.cloud.microsoft/", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://excel.cloud.microsoft/", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": true},
-    {"url": "https://powerpoint.cloud.microsoft/", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": true}
+    {"url": "https://outlook.cloud.microsoft/mail/", "fallback_app_name": "Outlook", "default_launch_container": "window", "create_desktop_shortcut": false},
+    {"url": "https://teams.microsoft.com/v2/", "fallback_app_name": "Teams", "default_launch_container": "window", "create_desktop_shortcut": false},
+    {"url": "https://onedrive.live.com/", "fallback_app_name": "OneDrive", "default_launch_container": "window", "create_desktop_shortcut": false},
+    {"url": "https://word.cloud.microsoft/", "fallback_app_name": "Word", "default_launch_container": "window", "create_desktop_shortcut": false},
+    {"url": "https://excel.cloud.microsoft/", "fallback_app_name": "Excel", "default_launch_container": "window", "create_desktop_shortcut": false},
+    {"url": "https://powerpoint.cloud.microsoft/", "fallback_app_name": "PowerPoint", "default_launch_container": "window", "create_desktop_shortcut": false}
   ]
 }
 EOF
 
 python3 -m json.tool "$M365_POLICY" > /dev/null
 
-for dir in /etc/opt/edge/policies/managed /etc/opt/chrome/policies/managed; do
-    mkdir -p "$dir"
-    install -m 0644 "$M365_POLICY" "$dir/m365_pwas.json"
-done
+mkdir -p /etc/opt/chrome/policies/managed
+install -m 0644 "$M365_POLICY" /etc/opt/chrome/policies/managed/m365_pwas.json
 rm -f "$M365_POLICY"
 
+mkdir -p /etc/flatpak/overrides
+cat > /etc/flatpak/overrides/com.google.Chrome <<'EOF'
+[Context]
+filesystems=/etc/opt/chrome:ro
+EOF
+
+# Remove any Edge leftovers from earlier builds
+rm -rf /etc/opt/edge /etc/yum.repos.d/microsoft-edge.repo /etc/yum.repos.d/google-chrome.repo
+
 ### ----------------------------------------------------------------------------
-### Edge web app launchers (fixed IDs so they can be pinned)
+### Office web app launchers (run through Chrome Flatpak, fixed IDs for pinning)
+### Icons come from /usr/share/rexel-icons (already in system_files)
 ### ----------------------------------------------------------------------------
 
-EDGE_APPS=(
+APPS=(
   "outlook|Outlook|https://outlook.cloud.microsoft/mail/"
   "teams|Teams|https://teams.microsoft.com/v2/"
   "onedrive|OneDrive|https://onedrive.live.com/"
@@ -199,13 +196,13 @@ EDGE_APPS=(
   "powerpoint|PowerPoint|https://powerpoint.cloud.microsoft/"
 )
 
-for entry in "${EDGE_APPS[@]}"; do
+for entry in "${APPS[@]}"; do
     IFS='|' read -r id name url <<< "$entry"
     cat > "/usr/share/applications/rexel-${id}.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=${name}
-Exec=/usr/bin/microsoft-edge-stable --app=${url} --no-first-run
+Exec=flatpak run com.google.Chrome --app=${url} --no-first-run
 Icon=/usr/share/rexel-icons/${id}.png
 Categories=Office;
 Terminal=false
@@ -289,22 +286,6 @@ NoDisplay=true
 EOF
 
 ### ----------------------------------------------------------------------------
-### ONLYOFFICE: Flatpak preinstall on first boot
-### ----------------------------------------------------------------------------
-
-mkdir -p /usr/share/flatpak/preinstall.d /usr/share/flatpak/remotes.d
-cat > /usr/share/flatpak/remotes.d/flathub.flatpakrepo <<'EOF'
-[Flatpak Repo]
-Title=Flathub
-Url=https://dl.flathub.org/repo/
-Homepage=https://flathub.org/
-EOF
-cat > /usr/share/flatpak/preinstall.d/onlyoffice.preinstall <<'EOF'
-[Flatpak Preinstall org.onlyoffice.desktopeditors]
-Branch=stable
-EOF
-
-### ----------------------------------------------------------------------------
 ### Additional tools (Fedora repos)
 ### locate is provided by mlocate on Fedora
 ### ----------------------------------------------------------------------------
@@ -316,6 +297,20 @@ retry dnf5 install -y --setopt=retries=5 \
     hardinfo2 \
     plocate
 rpm -q remmina filezilla meld rclone hardinfo2 plocate
+
+### ----------------------------------------------------------------------------
+### Move /opt contents again if any tool dropped files there
+### ----------------------------------------------------------------------------
+
+if [ -d /opt ] && [ ! -L /opt ]; then
+    shopt -s dotglob nullglob
+    for item in /opt/*; do
+        mv "$item" /usr/lib/opt/
+    done
+    shopt -u dotglob nullglob
+    rmdir /opt
+    ln -s var/opt /opt
+fi
 
 ### ----------------------------------------------------------------------------
 ### Cleanup
